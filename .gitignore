@@ -1,0 +1,22 @@
+# Dependências
+node_modules/
+
+# Sessão e dados sensíveis — NUNCA subir
+session.json
+.env
+*.local
+
+# Arquivos gerados pelo scraper/executor (contêm dados dos alunos)
+saida/
+respostas.md
+debug_*.html
+*.png
+discovery/
+report.json
+answers.json
+remaining_*.json
+all_answers.txt
+
+# Sistema
+.DS_Store
+Thumbs.db

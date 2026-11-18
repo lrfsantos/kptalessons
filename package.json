@@ -1,0 +1,19 @@
+{
+  "name": "cna-corretor",
+  "version": "1.0.0",
+  "description": "Automatiza a correção de atividades escritas no portal do professor CNA (app.cna.com.br). Login manual, sem credenciais no código.",
+  "main": "executor.js",
+  "scripts": {
+    "login": "node login.js",
+    "scrape": "node scraper.js",
+    "executor": "node executor.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "playwright-core": "^1.45.0"
+  },
+  "keywords": ["cna", "professor", "correção", "automação", "playwright"],
+  "license": "MIT"
+}
