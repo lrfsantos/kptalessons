@@ -42,5 +42,5 @@ function ask(question) {
   console.log('   Ele está no .gitignore e NUNCA deve ser enviado ao GitHub.');
 
   await browser.close();
-  console.log('✅ Pronto! Agora rode:  node scraper.js');
+  console.log('✅ Pronto! Agora rode:  npm run scrape');
 })().catch(e => { console.error('💥 Erro:', e.message); process.exit(1); });
