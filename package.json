@@ -6,7 +6,8 @@
   "scripts": {
     "login": "node login.js",
     "scrape": "node scraper.js",
-    "executor": "node executor.js"
+    "apply": "node executor.js",
+    "test": "node --test \"tests/**/*.test.js\""
   },
   "engines": {
     "node": ">=18"

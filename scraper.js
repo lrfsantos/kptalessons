@@ -1,153 +1,97 @@
 // ============================================================
-// CNA Corretor — SCRAPER
-// Baixa as atividades escritas dos alunos do portal do professor
-// (app.cna.com.br) usando a sessão salva no login.js.
+// CNA Corretor — SCRAPER (exporta as atividades escritas)
 //
-// Modos:
-//   node scraper.js            -> baixa recursos e salva em answers.json
-//   node scraper.js --discover -> abre o portal e salva a estrutura da
-//                                 página em discovery/ para você me
-//                                 guiar na configuração dos seletores.
+// Navega o portal do professor DE FORMA INDEPENDENTE e gera:
+//   answers.json              -> dados estruturados (uso do executor)
+//   lotes/lote-NN.md          -> documentos para a IA corrigir
+//                                (INJECT + nonce no topo de cada lote)
+//
+// Uso:
+//   npm run scrape            (lotes de 8 atividades)
+//   npm run scrape -- --lote 5 --all
+// Requer: session.json (rode `npm run login` antes).
 // ============================================================
 const fs = require('fs');
 const path = require('path');
 const { launch } = require('./lib/browser');
+const portal = require('./lib/portal');
+const md = require('./lib/md');
+const { preFilter } = require('./lib/guard');
 const CFG = require('./lib/config');
 
-// ---------------------------------------------------------------
-// SELETORES DO PORTAL
-// Preenchidos conforme a navegação real (me guie pelo --discover).
-// ---------------------------------------------------------------
-const SELECTORS = {
-  // Página que lista as atividades / correções (ex.: "Correções")
-  activitiesPage: '',          // ex.: '/correcoes' ou seletor de link
-  activityLink: '',            // seletor para abrir uma atividade
-  studentItem: '',             // seletor do cartão/linha de cada aluno
-  studentName: '',             // seletor do nome do aluno
-  answerText: '',              // seletor do texto da resposta escrita
-};
-
-// ---------------------------------------------------------------
-// Utilitários
-// ---------------------------------------------------------------
-function pa(mode, extra = []) {
-  return [
-    'Uso: node scraper.js [--discover]',
-    '',
-    'Modos:',
-    '   (sem flags)   baixa as atividades e salva em answers.json',
-    '   --discover    abre o portal e grava a estrutura em discovery/',
-    ...extra,
-  ].join('\n') + (mode === 'ok' ? '' : '\n\nPor enquanto preencha os SELETORES no topo do arquivo.');
+function arg(name, def) {
+  const i = process.argv.indexOf(`--${name}`);
+  return i > -1 && process.argv[i + 1] ? process.argv[i + 1] : def;
 }
+const onlyPending = !process.argv.includes('--all');
+const loteSize = parseInt(arg('lote', String(CFG.LOTE_SIZE || 8)), 10) || 8;
 
-function escId(name) {
-  return String(name || 'sem-nome').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
-}
-
-// ---------------------------------------------------------------
-// Modo DISCOVERY — te ajuda a me mostrar a estrutura do portal
-// ---------------------------------------------------------------
-async function discover(page) {
-  fs.mkdirSync(CFG.DISCOVERY_DIR, { recursive: true });
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const outDir = path.join(CFG.DISCOVERY_DIR, stamp);
-  fs.mkdirSync(outDir, { recursive: true });
-
-  console.log('🔎 Modo discovery. O navegador abriu logado.');
-  console.log('   Navegue até a página das atividades escritas que você corrige.');
-  console.log('   A cada tela, pressione ENTER no terminal para salvar a estrutura.');
-  console.log('   Digite "sair" e ENTER para encerrar.\n');
-
-  const readline = require('readline');
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const ask = q => new Promise(r => rl.question(q, r));
-
-  let i = 0;
-  for (;;) {
-    const cmd = await ask(`[tela ${++i}] Buscar em: (URL | obter | tudo | sair) `);
-    const c = cmd.trim().toLowerCase();
-    if (c === 'sair') break;
-
-    if (c && c !== 'obter' && c !== 'tudo' && c.startsWith('http')) {
-      await page.goto(c, { waitUntil: 'domcontentloaded', timeout: CFG.NAV_TIMEOUT });
-    }
-
-    // HTML cru
-    const html = await page.content();
-    fs.writeFileSync(path.join(outDir, `tela_${i}.html`), html);
-
-    // Lista de candidatos a seletor (elementos com texto relevante)
-    const candidates = await page.evaluate(() => {
-      const out = [];
-      const sel = 'a, button, [role=button], input[type=text], textarea, .card, li, .list-item, table tr, [class*=answer], [class*=aluno], [class*=student]';
-      document.querySelectorAll(sel).forEach((el, idx) => {
-        const text = (el.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 120);
-        const cls = el.className && typeof el.className === 'string' ? el.className : '';
-        if (text && !out.some(o => o.text === text && o.cls === cls)) {
-          out.push({ idx, tag: el.tagName.toLowerCase(), cls, text });
-        }
-      });
-      return out.slice(0, 400);
-    });
-    fs.writeFileSync(path.join(outDir, `candidatos_${i}.json`), JSON.stringify(candidates, null, 2));
-
-    console.log(`   💾 Salvo tela ${i}: html + ${candidates.length} candidatos a seletor.`);
-    console.log('   Resumo dos candidatos (tag | classe | texto):');
-    for (let j = 0; j < Math.min(15, candidates.length); j++) {
-      const f = candidates[j];
-      console.log(`     ${f.idx} <${f.tag}> .${f.cls.slice(0, 40)} | ${f.text.slice(0, 60)}`);
-    }
-  }
-  rl.close();
-  console.log('\n✅ Discovery salvo em:', outDir);
-  console.log('   Copie o caminho acima para mim e eu monto os seletores.');
-}
-
-// ---------------------------------------------------------------
-// Modo principal — baixar atividades
-// ---------------------------------------------------------------
-async function scrape(page) {
-  if (!SELECTORS.activitiesPage) {
-    console.error(pa('err'));
-    process.exit(1);
-  }
-
-  // 1. Vai para a página de atividades
-  const url = SELECTORS.activitiesPage.startsWith('http')
-    ? SELECTORS.activitiesPage
-    : CFG.PORTAL_URL + SELECTORS.activitiesPage;
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: CFG.NAV_TIMEOUT });
-  console.log('🌐 Abri:', page.url());
-
-  // 2. Coleta as atividades/alunos
-  const results = [];
-  // (Preenchido depois de mapear a estrutura real — ver --discover)
-
-  // Grava qualquer dado parcial até aqui
-  fs.writeFileSync(CFG.ANSWERS_FILE, JSON.stringify(results, null, 2));
-  console.log('💾 Parcial salvo em answers.json (' + results.length + ' itens).');
-}
-
-// ---------------------------------------------------------------
-// Ponto de entrada
-// ---------------------------------------------------------------
 (async () => {
-  const flag = process.argv.includes('--discover');
-  const mode = flag ? 'discovery' : 'scrape';
-  console.log(`🚀 CNA Corretor — scraper (modo: ${mode})`);
+  console.log('🚀 CNA Corretor — scrape (coleta de atividades escritas)');
 
   if (!fs.existsSync(CFG.STATE_FILE)) {
-    console.error('❌ Nenhuma sessão. Rode primeiro:  npm run login');
+    console.error('❌ Sessão não encontrada. Rode primeiro:  npm run login');
     process.exit(1);
   }
 
-  const { browser, page, usedSavedSession } = await launch();
-  if (!usedSavedSession) console.log('⚠️  Sessão usada, mas confira se ainda está logado.');
+  const { browser, page } = await launch({ headless: CFG.HEADLESS === true });
+  const classes = [];
 
   try {
-    if (mode === 'discovery') await discover(page);
-    else await scrape(page);
+    // 1. Turmas
+    await page.goto(portal.CLASSES_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector(portal.SEL.classLink, { timeout: CFG.NAV_TIMEOUT });
+    const allClasses = await portal.listClasses(page);
+    const withPending = onlyPending ? allClasses.filter(c => c.pending > 0) : allClasses;
+    console.log(`🏫 ${allClasses.length} turma(s); ${withPending.length} com pendências.`);
+
+    // 2. Alunos e lições de cada turma
+    for (const c of withPending) {
+      const turma = { name: c.name, level: c.level, shift: c.shift, classId: c.classId, students: [] };
+      const students = await portal.listStudents(page, c.classId, { onlyPending });
+      console.log(`   Turma ${c.name}: ${students.length} aluno(s) com pendências.`);
+
+      for (const s of students) {
+        const lessons = await portal.listLessons(page, c.classId, s.studentId);
+        const pendentes = lessons.filter(l => l.status === 'A CORRIGIR' && l.ids);
+
+        const aluno = {
+          name: s.name, studentId: s.studentId, pending: s.pending,
+          lessons: lessons.map(l => ({
+            title: l.title.replace(/^.*?(?=(Unit|Welcome|Skills|Lesson))/, '').trim() || l.title,
+            unit: l.unit, pending: l.status === 'A CORRIGIR', ids: l.ids,
+          })),
+        };
+
+        // 3. Lê enunciado + resposta de cada pendente
+        for (const l of pendentes) {
+          await page.goto(portal.activityUrl(l.ids.classId, l.ids.studentId, l.ids.unitId, l.ids.lessonId, l.ids.activityId), { waitUntil: 'domcontentloaded' });
+          const data = await portal.readActivity(page);
+          l.question = data.question;
+          l.answer = data.answer;
+          l.prefilter = preFilter(data.answer); // (b) pré-filtro de injeção
+        }
+        turma.students.push(aluno);
+      }
+      classes.push(turma);
+    }
+
+    if (!classes.length) {
+      console.log('✅ Nenhuma pendência encontrada. Nada a exportar.');
+      return;
+    }
+
+    // 4. Salva dados estruturados
+    fs.writeFileSync(CFG.ANSWERS_FILE, JSON.stringify({ generatedAt: new Date().toISOString(), classes }, null, 2));
+    console.log(`💾 answers.json (${classes.reduce((a, c) => a + c.students.length, 0)} aluno(s)).`);
+
+    // 5. Gera os lotes MD (nonce novo + INJECT em cada lote)
+    const { nonce, files, total } = md.buildBatches(classes, { loteSize });
+    console.log(`📄 ${files.length} lote(s) com ${total} atividade(s) em ${path.join(CFG.ROOT, 'lotes')}${path.sep} (nonce ${nonce}).`);
+    console.log('\n👉 Próximos passos:');
+    console.log('   1. Abra os arquivos de lotes/, cole o conteúdo na sua IA e devolva');
+    console.log('      cada um como lote-NN.devolvido.md na mesma pasta.');
+    console.log('   2. Rode:  npm run apply');
   } finally {
     await browser.close();
   }

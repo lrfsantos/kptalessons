@@ -8,6 +8,9 @@ session.json
 
 # Arquivos gerados pelo scraper/executor (contêm dados dos alunos)
 saida/
+lotes/
+revisao.md
+correcao.md
 respostas.md
 debug_*.html
 *.png
