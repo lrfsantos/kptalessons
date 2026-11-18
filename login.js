@@ -8,6 +8,7 @@ const { chromium } = require('playwright-core');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const { launch } = require('./lib/browser');
 
 const STATE_FILE = path.join(__dirname, 'session.json');
 const LOGIN_URL = 'https://app.cna.com.br/login';
@@ -25,20 +26,8 @@ function ask(question) {
   console.log('3. Depois de logado(a), volte aqui e aperte ENTER.');
   console.log('A sua senha NÃO é salva — apenas a sessão do navegador.\n');
 
-  let browser;
-  try {
-    browser = await chromium.launch({ channel: 'msedge', headless: false });
-    console.log('🌐 Abrindo com Microsoft Edge...');
-  } catch {
-    console.log('⬇️  Baixando o Chromium (primeira vez pode demorar)...');
-    browser = await chromium.launch({ headless: false });
-  }
-
-  const context = await browser.newContext({
-    storageState: fs.existsSync(STATE_FILE) ? STATE_FILE : undefined,
-    viewport: { width: 1440, height: 900 },
-  });
-  const page = await context.newPage();
+  const { browser, context, page, kind } = await launch({ fresh: true });
+  console.log(`🌐 Abrindo com ${kind}...`);
 
   await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
   console.log('✅ Navegador aberto em:', page.url());
