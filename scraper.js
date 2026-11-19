@@ -90,6 +90,9 @@ const loteSize = parseInt(arg('lote', String(CFG.LOTE_SIZE || 8)), 10) || 8;
               entry.answer = d.answer;
               entry.blank = d.blank;
               entry.prefilter = preFilter(d.answer); // (b) pré-filtro de injeção
+              // (T6a) título do breadcrumb no portal — comparado antes de preencher
+              const bc = await portal.readBreadcrumb(page);
+              entry.breadcrumb = bc.ok ? bc.title : '';
               if (d.blank) blanks.push(md.refOf(entry.ids));
             }
           }

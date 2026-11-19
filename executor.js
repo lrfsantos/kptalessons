@@ -19,7 +19,7 @@ const path = require('path');
 const { launch } = require('./lib/browser');
 const portal = require('./lib/portal');
 const mdrv = require('./lib/md');
-const { validateEntry } = require('./lib/guard');
+const { validateEntry, normText } = require('./lib/guard');
 const CFG = require('./lib/config');
 
 // Padrão: todos os lotes devolvidos na pasta lotes/
@@ -62,6 +62,8 @@ function indexOriginals(data) {
   if (!entries.length) { console.error('⚠️  Nenhuma atividade encontrada nos arquivos.'); process.exit(1); }
 
   // ---- Validação ANTES de qualquer navegação --------------------
+  // T6c: ref duplicada nos devolvidos => as DUAS entradas vão para revisão.
+  const dupRefs = mdrv.duplicateRefs(entries);
   const results = [];
   for (const e of entries) {
     const original = originals.get(e.ref);
@@ -72,6 +74,10 @@ function indexOriginals(data) {
 
     if (e.error) {
       results.push({ ...e, status: 'REVISAO', reasons: [e.error] });
+      continue;
+    }
+    if (e.ref && dupRefs.has(e.ref)) {
+      results.push({ ...e, status: 'REVISAO', reasons: [`ref ${e.ref} duplicada nos devolvidos`] });
       continue;
     }
     if (e.pending) {
@@ -90,6 +96,18 @@ function indexOriginals(data) {
   const prontas = results.filter(r => r.status === 'PRONTA');
   console.log(`✅ ${prontas.length} pronta(s) para preencher; ${results.length - prontas.length} para revisão manual.`);
 
+  // ---- T7: relatório da IA (só consulta; o oficial é o calculado aqui) ----
+  const reports = [];
+  for (const f of files) {
+    const text = typeof f === 'string' && /<|#/i.test(f) ? f : fs.readFileSync(f, 'utf8');
+    const rep = mdrv.extractReport(text);
+    if (rep) reports.push(`## ${typeof f === 'string' && /<|#/i.test(f) ? 'colado' : f}\n\n${rep}`);
+  }
+  if (reports.length) {
+    fs.writeFileSync(CFG.RELATORIO_IA_FILE, `# Relatório da IA (somente consulta)\n\n_O relatório oficial é o calculado pelo programa, em report.json/terminal._\n\n` + reports.join('\n\n---\n\n') + '\n');
+    console.log(`📝 relatorio-ia.md salvo (relatório da IA — só consulta).`);
+  }
+
   // ---- Preenche no portal --------------------------------------
   const { browser, page } = await launch();
   const filled = [];
@@ -99,6 +117,28 @@ function indexOriginals(data) {
       process.stdout.write(`   ${r.ref} ... `);
       try {
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: CFG.NAV_TIMEOUT });
+
+        // T6a: cabeçalho/breadcrumb do portal deve bater com o título guardado
+        const origL = originals.get(r.ref) ? originals.get(r.ref).lesson : null;
+        const bc = await portal.readBreadcrumb(page);
+        if (origL && origL.breadcrumb && bc.ok && normText(bc.title) !== normText(origL.breadcrumb)) {
+          r.status = 'REVISAO';
+          r.reasons = [...(r.reasons || []), `cabeçalho do portal "${bc.title}" não bate com o guardado "${origL.breadcrumb}"`];
+          console.log(`REVISÃO: cabeçalho diverge`);
+          continue;
+        }
+
+        // T6b: releia enunciado/resposta da página e compare com o original
+        const reread = await portal.readActivity(page);
+        const q = origL ? (origL.question || '') : '';
+        const a = origL ? (origL.answer || '') : '';
+        if (!reread.captured || normText(reread.question) !== normText(q) || normText(reread.answer) !== normText(a)) {
+          r.status = 'REVISAO';
+          r.reasons = [...(r.reasons || []), 'enunciado/resposta do portal difere do capturado'];
+          console.log(`REVISÃO: conteúdo diverge do capturado`);
+          continue;
+        }
+
         const res = await portal.fillCorrection(page, r.classification, r.feedback);
         if (res.ok) { filled.push(r); console.log(`preenchida (${r.classification}, score ${r.score}) — aguardando Finalizar do professor`); }
         else { r.status = 'REVISAO'; r.reasons = [...(r.reasons || []), res.error]; console.log(`FALHOU: ${res.error}`); }

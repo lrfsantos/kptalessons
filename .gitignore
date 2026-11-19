@@ -9,7 +9,10 @@ session.json
 # Arquivos gerados pelo scraper/executor (contêm dados dos alunos)
 saida/
 lotes/
+lotes/**/*.devolvido.md
+*.devolvido.md
 revisao.md
+relatorio-ia.md
 correcao.md
 respostas.md
 debug_*.html
@@ -17,6 +20,8 @@ debug_*.html
 discovery/
 report.json
 answers.json
+*mapa*.json
+*mapeamento*.json
 remaining_*.json
 all_answers.txt
 

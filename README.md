@@ -81,10 +81,16 @@ e três campos preenchidos:
 
 - A ref `[C… S… U… L… A…]` identifica turma/aluno/unit/lesson/activity no portal.
 - O nonce aparece no cabeçalho do lote e nos marcadores da resposta.
+- **O parser lê os campos SOMENTE depois do marcador `RESPOSTA-FIM-{nonce}`** de cada
+  atividade. Se o marcador de fim não existir, ou o de início/fim aparecer mais de uma vez,
+  ou a ordem estiver errada, a entrada vai para revisão — assim um aluno que clone os
+  rótulos (`**Classificação:**` etc.) **dentro** da resposta não consegue forjar a nota.
+- O feedback é cortado na primeira linha só de traços (`---`), em `_Fim do lote` ou em
+  `<<<RELATORIO` — nada disso vai para a caixa do portal.
 - `**Flag:**` marca respostas suspeitas: `NENHUM` (normal), `IA`, `INJECAO`, `GIBBERISH`.
-  Regra: `Flag` ≠ `NENHUM` exige **Classificação `INCORRETO` e `Score` 0**; a IA só arma
-  uma Flag com **prova explícita** (texto mandando a IA fazer algo, marcadores óbvios de IA,
-  sem sentido). `**Revisão:**` = `NAO` ou `SIM - motivo` quando merece atenção do professor.
+  Regra: `Flag` ≠ `NENHUM` exige **Classificação `INCORRETO` e `Score` 0** e **Revisão
+  `SIM`**; a IA só arma uma Flag com **prova explícita** (texto mandando a IA fazer algo,
+  marcadores óbvios de IA, sem sentido). `**Revisão:**` = `NAO` ou `SIM - motivo`.
 - Exemplos completos e funcionais em `exemplos/` (dados fictícios).
 
 ### O que acontece com uma entrada mal preenchida, faltando campo ou com valor inesperado?
@@ -99,11 +105,17 @@ Ela **nunca chega ao portal**. Entradas com problema ficam em `revisao.md` com o
 | Score incoerente com a classificação (80+ Correto; 65–79 Parcial; <65 Incorreto) | revisão manual |
 | `Flag` ausente/inválida ou ainda `AGUARDANDO` | revisão manual |
 | `Flag` = IA/INJECAO/GIBBERISH com classificação ≠ INCORRETO ou Score ≠ 0 | revisão manual |
+| `Flag` = IA/INJECAO/GIBBERISH com `Revisão` = `NAO` | revisão manual |
+| Resposta devolvida como CORRETO contendo português (triagem: ã/õ/ç ou 2+ palavras comuns) | revisão manual |
 | `Revisão` = `SIM` (IA mesmo pediu atenção) | revisão manual |
 | Enunciado ou resposta alterados pela IA (comparação com `answers.json`) | revisão manual |
 | Atividade sinalizada pelo pré-filtro e devolvida como CORRETO | revisão manual |
 | Ref que não existe em `answers.json` | revisão manual |
-| Feedback vazio | revisão manual |
+| Mesma ref aparecendo duas vezes nos devolvidos | as duas entradas vão para revisão |
+| Marcador de fim ausente/repetido ou ordem errada | revisão manual |
+| Feedback vazio ou com mais de 2 parágrafos | revisão manual |
+| Cabeçalho do portal não bate com o título guardado da ref | revisão manual (nada preenchido) |
+| Enunciado/resposta do portal difere do capturado | revisão manual (nada preenchido) |
 
 Sinônimos aceitos na classificação: `ERRADO`/`MISS` → INCORRETO; `INCOMPLETO`/`PARTIAL` → PARCIAL.
 
@@ -126,9 +138,10 @@ não está pronto". Se o OCR falhar ou devolver lixo (quando existir), a respost
 
 ### Quantas entradas por MD? Existe divisão em lotes?
 
-Sim. `LOTE_SIZE` (padrão **8** atividades por lote, ajustável via `--lote N` ou
-variável). Cada lote é um arquivo independente com INJECT + nonce próprios, para caber
-no contexto de IAs gratuitas. O professor pode corrigir um lote por vez.
+Sim. `LOTE_SIZE` (padrão **8** atividades por lote, ajustável por variável de ambiente).
+Cada lote é um arquivo independente com INJECT + nonce próprios, para caber no contexto de
+IAs gratuitas. **Recomendado: no máximo 12 atividades por arquivo** (o padrão 8 já está
+dentro disso). O professor pode corrigir um lote por vez.
 
 ### Alguma nota pode ser lançada sem o professor revisar? Como funciona a etapa antes do Finalizar?
 
@@ -150,7 +163,7 @@ Só no **terminal** (nenhum arquivo de log). O registro contém: contador da ent
 ref `[C… S… U… L… A…]`, status (preenchida / falhou / revisão) e motivo curto.
 **Nunca** contém: respostas de alunos, feedbacks gerados, cookies, senhas ou tokens.
 Arquivos com dados de alunos (`answers.json`, `lotes/`, `revisao.md`, `report.json`,
-`session.json`) ficam no `.gitignore`.
+`relatorio-ia.md`, `session.json`) ficam no `.gitignore`.
 
 ## Segurança contra injeção de prompt
 
@@ -160,18 +173,56 @@ máxima". Defesas implementadas (ver `lib/guard.js` e `tests/`):
 - **(a) Nonce** — cada lote tem um token aleatório (`crypto.randomBytes`) embutido nos
   marcadores `<<<RESPOSTA-INICIO/…/FIM-{nonce}>>>` e nas instruções; o parser usa o
   nonce para localizar e conferir a resposta original.
-- **(b) Pré-filtro** — antes de gerar o MD, a resposta do aluno é varrida por frases de
-  injeção ("ignore previous", "marque como correto", "nota máxima"…) e de texto de IA
-  ("Here is the answer", "Certainly!"…). Entradas suspeitas vão para o MD **marcadas**
-  com um aviso à IA.
-- **(c) Validação na volta** — campos obrigatórios, valores permitidos, coerência
+- **(b) Parser orientado ao marcador** — `parseFile` só lê Classificação/Score/Flag/Revisão/
+  Feedback **depois** do `RESPOSTA-FIM-{nonce}` do bloco; marcador ausente/repetido/ordem
+  errada ⇒ revisão. Um ataque que clone os rótulos dentro da resposta não altera o retorno.
+- **(c) Pré-filtro** — antes de gerar o MD, a resposta do aluno é varrida por frases de
+  injeção ("ignore previous", "marque como correto", "nota máxima"…), de texto de IA
+  ("Here is the answer", "Certainly!"…) e por **rótulos de campo clonados**, marcadores de
+  resposta e linhas `---`/`####`. Entradas suspeitas vão para o MD **marcadas** com um aviso
+  à IA.
+- **(d) Validação na volta** — campos obrigatórios, valores permitidos, coerência
   classificação × score, enunciado/resposta/identificação intactos; **entrada sinalizada
   e devolvida como CORRETO vai para revisão manual**, nunca é preenchida automaticamente.
-- **(d) Estatísticas locais** — médias e contagens de `report.json` são recalculadas pelo
-  código; qualquer "resumo" escrito pela IA é ignorado.
-- **(e) Finalizar é sempre humano** — o programa preenche e para; professor revisa no
+- **(e) Regras checadas em código** — Flag armada exige INCORRETO + Score 0 + Revisão SIM;
+  CORRETO com português na resposta e feedback com mais de 2 parágrafos vão para revisão
+  (triagem, nunca preenchimento).
+- **(f) Estatísticas locais** — médias e contagens de `report.json` são recalculadas pelo
+  código; o relatório da IA (se houver) é salvo à parte em `relatorio-ia.md`, só consulta.
+- **(g) Finalizar é sempre humano** — o programa preenche e para; professor revisa no
   portal e finaliza.
-- **(f) Lotes** — documentos pequenos reduzem o efeito de injeções no contexto.
+- **(h) Lotes** — documentos pequenos reduzem o efeito de injeções no contexto.
+
+## Privacidade do que vai para a IA
+
+O MD enviado à IA **não leva nomes**. O aluno aparece só pelo código (`### Aluno: S000002`)
+e a turma só pelo código (`## Turma: C000002`); o mapeamento código→nome fica **apenas** em
+`answers.json` (gitignored, local). A resposta do aluno é **mascarada** antes de ir para o
+MD: e-mails → `[EMAIL]`, telefones brasileiros → `[TELEFONE]`, CPF → `[CPF]`, links →
+`[LINK]` e o nome do próprio aluno → `[NOME]`. O texto cru fica só em `answers.json`.
+
+**Nunca sai da máquina:** senhas, cookies/sessão (`session.json`), nomes de alunos e
+turmas, respostas cruas e qualquer dado real. O terminal, `revisao.md` e `report.json` são
+locais e podem mostrar o necessário para a revisão.
+
+## Fail-safe antes de preencher
+
+Antes de preencher qualquer atividade, o `apply`:
+
+1. abre a URL da ref;
+2. **confere o cabeçalho/breadcrumb** da página com o título guardado em `answers.json`
+   (capturado no scrape) — se divergir, **não preenche** (vai para revisão);
+3. **relê enunciado e resposta** da página e compara com o capturado — se divergir, **não
+   preenche**;
+4. verifica **refs duplicadas** nos devolvidos (as duas vão para revisão);
+5. preenche e **confere o radio marcado e o texto do feedback** antes de contar como
+   preenchida.
+
+Como testar (a), (b) e (d) sem risco: (a) e (b) têm teste de unidade no parser/guarda e o
+cabeçalho real do portal foi conferido no HTML (`[data-sel="breadcrumb-title"]` =
+"Atividade 10 - Writing" para `C000001 S000001 U000001 L000001 A000001`; atividades com unit/lesson
+diferentes têm títulos diferentes). (d) é verificado no próprio `fillCorrection`: se o radio
+ou o texto não baterem, a entrada cai em revisão e **não** é contada como preenchida.
 
 ## Estrutura
 
@@ -200,9 +251,14 @@ navegando, nada é fixo no código.
 
 ## Status (o que ainda não está pronto)
 
-- **Execução ponta a ponta real ainda não rodou** — o fluxo no portal (coleta de várias
-  turmas e preenchimento) foi mapeado e codificado, mas falta rodar com uma sessão real
-  de professor (requer `npm run login`) e validar em produção com calma.
+- **Auditoria de 2026-11 (T1–T10) aplicada**: parser orientado ao marcador (T1), corte do
+  feedback (T2), tolerância a cerca de código (T3), INJECT oficial (T4), regras T5 em
+  código, fail-safe antes de preencher (T6), relatório da IA em `relatorio-ia.md` (T7),
+  `LOTE_SIZE` padrão 8 / recomendado ≤12 (T8), testes + README (T9) e privacidade do MD
+  com máscaras (T10). Testes: 46 passando.
+- **Execução ponta a ponta real ainda não rodou com o fail-safe T6** — o fluxo no portal
+  (coleta e preenchimento) foi mapeado e o cabeçalho real conferido no HTML, mas o `apply`
+  completo com as verificações (a)/(b)/(d) ainda não rodou em produção.
 - **OCR não existe** — não é necessário no fluxo atual (texto vem do DOM). Ver FAQ.
 - **Tela de revisão é em arquivo (`revisao.md`) + portal** — não há interface gráfica
   própria; o professor revisa no próprio site.
@@ -213,3 +269,5 @@ navegando, nada é fixo no código.
   não foi testado.
 - **Nonce vs. IAs**: se a IA remover/alterar os marcadores com nonce, a entrada cai em
   revisão manual (comportamento seguro, mas o lote não é aplicado automaticamente).
+- **Repositório privado**: o repositório precisa ser PRIVADO (hoje é possível clonar sem
+  login) — ver limitações.
