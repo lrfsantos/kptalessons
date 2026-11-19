@@ -22,14 +22,11 @@ function ask(question) {
 }
 
 (async () => {
-  const argNome = process.argv.indexOf('--nome');
-  const nomeArg = argNome >= 0 ? (process.argv[argNome + 1] || '').trim() : '';
-
   console.log('🔐 CNA Corretor — Login manual');
   console.log('----------------------------------');
   console.log('1. Uma janela do navegador vai abrir.');
   console.log('2. Faça login na SUA conta do portal do professor.');
-  console.log('3. Depois de logado(a), volte aqui e aperte ENTER.');
+  console.log('3. O programa reconhece o login sozinho e continua.');
   console.log('A sua senha NÃO é salva — apenas a sessão do navegador.\n');
 
   // Contexto FRESH: nunca reaproveita cookies de outra conta.
@@ -38,24 +35,33 @@ function ask(question) {
 
   await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
   console.log('✅ Navegador aberto em:', page.url());
-  console.log('\n👉 Faça o login na janela que abriu e depois digite ENTER aqui.\n');
+  console.log('\n👉 Faça o login na janela que abriu. Aguardando reconhecimento...\n');
 
-  for (;;) {
-    await ask('Pressione ENTER quando estiver logado(a)... ');
-    if (await portal.isAuthenticated(page)) break;
-    console.log('⚠️  Ainda não reconheci o login no portal. Faça login e aperte ENTER de novo.');
+  // Detecta a autenticação no DOM real (perfil + logo, sem /login).
+  // Não pede senha, não pede ENTER: o portal é a única tela de login.
+  let autenticado = false;
+  const limite = Date.now() + 5 * 60 * 1000;
+  while (Date.now() < limite) {
+    autenticado = await portal.isAuthenticated(page);
+    if (autenticado) break;
+    await new Promise(r => setTimeout(r, 2000));
   }
+  if (!autenticado) {
+    await browser.close();
+    throw new Error('login não reconhecido no portal (tempo esgotado)');
+  }
+  console.log('✅ Login reconhecido no portal.');
 
   // Só salva a sessão DEPOIS da autenticação confirmada no DOM.
   await context.storageState({ path: CFG.STATE_FILE });
   console.log('\n💾 Sessão salva em session.json');
 
-  let name = nomeArg;
-  if (!name) {
-    name = (await ask('Como você quer ser identificado(a) nesta instalação? Ex.: Luiz\nNome: ')).trim();
+  let nome = (process.env.CNA_NOME || '').trim();
+  if (!nome) {
+    nome = (await ask('Como você quer ser identificado(a) nesta instalação? Ex.: Luiz\nNome: ')).trim();
   }
-  account.saveAccount(name);
-  console.log(`👤 Conta identificada como: ${name}`);
+  account.saveAccount(nome);
+  console.log(`👤 Conta identificada como: ${nome}`);
   console.log('📢 A sessão contém cookies de acesso. Está no .gitignore e nunca vai ao GitHub.');
 
   await browser.close();

@@ -91,3 +91,11 @@ test('11: troca de conta não altera lógica de correção/finalização', () =>
   assert.match(executor, /finalize\(page\)/, 'executor continua finalizando');
   assert.match(executor, /aplicadas = filled\.filter\(r => r\.finalized/, 'appliedRefs continua só com finalized');
 });
+
+test('login: detecta autenticação automaticamente, sem exigir ENTER', () => {
+  const code = fs.readFileSync(require.resolve('../login.js'), 'utf8');
+  assert.match(code, /await portal\.isAuthenticated\(page\)/, 'confirma login no DOM');
+  assert.ok(!/Pressione ENTER quando estiver logado/.test(code), 'sem ENTER para login');
+  assert.match(code, /setTimeout\(r, 2000\)/, 'faz polling até o portal reconhecer');
+  assert.match(code, /launch\(\{\s*fresh:\s*true\s*\}\)/, 'contexto limpo');
+});
