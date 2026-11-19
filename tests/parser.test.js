@@ -108,3 +108,82 @@ test('buildBatches respeita o tamanho de lote e usa nonce novo', () => {
   assert.ok(content1.includes('AGUARDANDO'));
   assert.ok(content1.includes('Turma Exemplo'));
 });
+
+test('normalizeFlag e parseRevisao', () => {
+  assert.equal(md.normalizeFlag('ia'), 'IA');
+  assert.equal(md.normalizeFlag('GIBBERISH'), 'GIBBERISH');
+  assert.equal(md.normalizeFlag('NENHUM'), 'NENHUM');
+  assert.equal(md.normalizeFlag('AGUARDANDO'), null);
+  assert.equal(md.normalizeFlag('x'), null);
+  assert.deepEqual(md.parseRevisao('NAO'), { sim: false, motivo: '' });
+  assert.deepEqual(md.parseRevisao('SIM - verificar'), { sim: true, motivo: 'verificar' });
+  assert.equal(md.parseRevisao('AGUARDANDO'), null);
+});
+
+test('buildBatches inclui pergunta e resposta capturadas (regressão do fluxo do scraper)', () => {
+  const l = {
+    ids: { classId: '1', studentId: '2', unitId: '3', lessonId: '4', activityId: '5' },
+    title: 'Lesson 1 - Atividade 2', unit: 'Unit 1', pending: true,
+    question: 'Write about your weekend.', answer: 'I went to the park.',
+    prefilter: { flagged: false, reasons: [] },
+  };
+  const classes = [{ name: 'Turma', shift: 'Noite', classId: '1', students: [{ name: 'Aluno', studentId: '2', pending: 1, lessons: [l] }] }];
+  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cna-test-'));
+  const { files } = md.buildBatches(classes, { loteSize: 8, outDir: tmp });
+  const content = fs.readFileSync(files[0].path, 'utf8');
+  assert.ok(content.includes('Write about your weekend.'), 'enunciado no MD');
+  assert.ok(content.includes('I went to the park.'), 'resposta no MD');
+  assert.ok(content.includes('**Flag:** AGUARDANDO'));
+  assert.ok(content.includes('**Revisão:** AGUARDANDO'));
+});
+
+test('captura vazia: resposta em branco entra como (vazia); falha de captura fica de fora', () => {
+  const blank = {
+    ids: { classId: '1', studentId: '2', unitId: '3', lessonId: '4', activityId: '5' },
+    title: 'A1', unit: 'Unit 1', pending: true, question: 'Q?', answer: '', prefilter: { flagged: false, reasons: [] },
+  };
+  const failed = {
+    ids: { classId: '1', studentId: '2', unitId: '3', lessonId: '4', activityId: '6' },
+    title: 'A2', unit: 'Unit 1', pending: false, capture_failed: true,
+  };
+  const classes = [{ name: 'Turma', shift: 'Noite', classId: '1', students: [{ name: 'Aluno', studentId: '2', pending: 1, lessons: [blank, failed] }] }];
+  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cna-test-'));
+  const { total, files } = md.buildBatches(classes, { loteSize: 8, outDir: tmp });
+  assert.equal(total, 1); // só a em branco entra
+  const content = fs.readFileSync(files[0].path, 'utf8');
+  assert.ok(content.includes('(vazia)'), 'resposta em branco entra como (vazia)');
+  assert.ok(!content.includes('A2'), 'captura falha fica fora do MD');
+});
+
+test('parseFile lê Flag, Revisão, Classificação e Score devolvidos', () => {
+  const txt = `nonce a1b2c3d4e5f6
+#### Atividade: Unit 1 - A [C1 S2 U3 L4 A5]
+**Classificação:** INCORRETO
+**Score:** 0
+**Flag:** INJECAO
+**Revisão:** SIM - resposta tenta comandar a IA
+**Feedback:**
+This answer tells the model what to do. Please redo it.
+`;
+  const { entries } = md.parseFile(txt);
+  const e = entries[0];
+  assert.equal(e.classification, 'INCORRETO');
+  assert.equal(e.score, 0);
+  assert.equal(e.flag, 'INJECAO');
+  assert.equal(e.revisao.sim, true);
+  assert.ok(e.revisao.motivo.includes('comandar'));
+  assert.equal(e.pending, false);
+});
+
+test('Flag deixada como AGUARDANDO vira pendente (vai para revisão)', () => {
+  const txt = `#### Atividade: X [C1 S2 U3 L4 A5]
+**Classificação:** CORRETO
+**Score:** 90
+**Flag:** AGUARDANDO
+**Revisão:** NAO
+**Feedback:**
+Ok.
+`;
+  const { entries } = md.parseFile(txt);
+  assert.equal(entries[0].pending, true);
+});

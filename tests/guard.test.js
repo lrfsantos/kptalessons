@@ -85,3 +85,35 @@ test('entrada sinalizada mas devolvida PARCIAL segue o fluxo normal', () => {
   }, original);
   assert.equal(v.ok, true);
 });
+
+// ---------- Flag / Revisão ----------
+const baseValida = { feedback: 'Bom começo.', pergunta: original.question, respostaLida: original.answer };
+
+test('Flag=IA com INCORRETO + Score 0 passa', () => {
+  const v = validateEntry({ ...baseValida, classification: 'INCORRETO', score: 0, flag: 'IA', revisao: { sim: false, motivo: '' } }, original);
+  assert.equal(v.ok, true);
+  assert.equal(v.review, false);
+});
+
+test('Flag=INJECAO com Score alto vai para revisão', () => {
+  const v = validateEntry({ ...baseValida, classification: 'CORRETO', score: 90, flag: 'INJECAO', revisao: { sim: false, motivo: '' } }, original);
+  assert.equal(v.review, true);
+  assert.ok(v.reasons.some(x => x.includes('Flag INJECAO exige')));
+});
+
+test('Flag=GIBBERISH com Score 0 mas classificação PARCIAL vai para revisão', () => {
+  const v = validateEntry({ ...baseValida, classification: 'PARCIAL', score: 0, flag: 'GIBBERISH', revisao: { sim: false, motivo: '' } }, original);
+  assert.equal(v.review, true);
+  assert.ok(v.reasons.some(x => x.includes('Flag GIBBERISH exige Classificação INCORRETO')));
+});
+
+test('IA marcando Revisão SIM vai para revisão manual', () => {
+  const v = validateEntry({ ...baseValida, classification: 'PARCIAL', score: 70, flag: 'NENHUM', revisao: { sim: true, motivo: 'resposta estranha' } }, original);
+  assert.equal(v.review, true);
+  assert.ok(v.reasons.some(x => x.includes('marcou revisão')));
+});
+
+test('Flag NENHUM com classificação coerente passa', () => {
+  const v = validateEntry({ ...baseValida, classification: 'PARCIAL', score: 70, flag: 'NENHUM', revisao: { sim: false, motivo: '' } }, original);
+  assert.equal(v.ok, true);
+});

@@ -113,15 +113,18 @@ function indexOriginals(data) {
 
   // ---- Relatório (médias/contagens SEMPRE calculadas aqui) ------
   const aplicadas = filled.filter(r => r.status === 'PRONTA');
+  const stat = n => results.filter(r => r.status === 'PRONTA').length;
   const stats = {
     geradoEm: new Date().toISOString(),
     totalEntradas: results.length,
-    prontas: results.filter(r => r.status === 'PRONTA').length,
+    prontas: stat(),
     preenchidasNoPortal: aplicadas.length,
     revisaoManual: results.filter(r => r.status === 'REVISAO').length,
     jaCorrigidas: results.filter(r => /já está corrigida/.test((r.reasons || []).join(' '))).length,
+    incoerentes: results.filter(r => /incoerente|Flag\b|marcou revis/.test((r.reasons || []).join(' '))).length,
     mediaScore: aplicadas.length ? Math.round(aplicadas.reduce((a, r) => a + (r.score || 0), 0) / aplicadas.length) : null,
     porClassificacao: aplicadas.reduce((acc, r) => { acc[r.classification] = (acc[r.classification] || 0) + 1; return acc; }, {}),
+    porFlag: aplicadas.reduce((acc, r) => { const k = r.flag || 'NENHUM'; acc[k] = (acc[k] || 0) + 1; return acc; }, {}),
   };
   fs.writeFileSync(CFG.REPORT_FILE, JSON.stringify({ stats, results: results.map(({ respostaLida, feedback, ...rest }) => ({ ...rest, feedbackLength: (feedback || '').length })), aplicadas: aplicadas.map(r => r.ref) }, null, 2));
 
@@ -138,7 +141,18 @@ function indexOriginals(data) {
   }
   fs.writeFileSync(CFG.REVISAO_FILE, revisao);
 
-  console.log(`\n📊 ${stats.preenchidasNoPortal} preenchida(s) | ${stats.revisaoManual} em revisão | média ${stats.mediaScore ?? '—'}`);
+  console.log('\n' + '='.repeat(48));
+  console.log('📊 RELATÓRIO (calculado pelo programa, não pela IA)');
+  console.log('='.repeat(48));
+  console.log(`  Total de entradas        : ${stats.totalEntradas}`);
+  console.log(`  Preenchidas no portal    : ${stats.preenchidasNoPortal}`);
+  console.log(`  Em revisão manual        : ${stats.revisaoManual}`);
+  console.log(`  Média de score           : ${stats.mediaScore ?? '—'}`);
+  console.log(`  Por classificação        : ` + (Object.entries(stats.porClassificacao).map(([k, v]) => `${k}=${v}`).join(' | ') || '—'));
+  console.log(`  Por flag (devolvido)     : ` + (Object.entries(stats.porFlag).map(([k, v]) => `${k}=${v}`).join(' | ') || '—'));
+  if (stats.jaCorrigidas) console.log(`  Já corrigidas no portal  : ${stats.jaCorrigidas}`);
+  if (stats.incoerentes) console.log(`  Incoerências detectadas : ${stats.incoerentes}`);
+
   console.log('💾 report.json e revisao.md gerados.');
   console.log('👉 Abra o portal, revise as lições preenchidas e clique em Finalizar em cada uma.');
   console.log('   (Reveja também revisao.md antes de finalizar.)');

@@ -27,6 +27,11 @@ não chama IA e não precisa de chave.
    - `answers.json` — cópia interna de referência (usada para detectar alterações da IA);
    - `lotes/lote-01.md`, `lote-02.md`, … — documentos MD para a IA, divididos em lotes,
      cada um com as instruções de correção (INJECT) no topo e um **nonce único**.
+
+   Atividades cuja captura falha NÃO entram no MD: são avisadas no terminal (turma/aluno/ref),
+   ficam de fora e são contadas no final. Resposta **realmente em branco** (o aluno enviou
+   vazio — página carregou e o campo está vazio) É capturada como `(vazia)` e entra
+   normalmente. Arquivo `debug_*.html` ocasional é diagnóstico temporário (gitignored).
 3. **Correção pela IA (passo humano)** — o professor abre cada lote, cola na IA que
    preferir e salva a resposta como `lotes/lote-01.devolvido.md` (mesmo nome, com
    `.devolvido` antes da extensão).
@@ -68,12 +73,18 @@ e três campos preenchidos:
 
 **Classificação:** CORRETO | PARCIAL | INCORRETO
 **Score:** 0–100
+**Flag:** NENHUM | IA | INJECAO | GIBBERISH
+**Revisão:** NAO | SIM - motivo
 **Feedback:**
 1 ou 2 parágrafos.
 ```
 
 - A ref `[C… S… U… L… A…]` identifica turma/aluno/unit/lesson/activity no portal.
 - O nonce aparece no cabeçalho do lote e nos marcadores da resposta.
+- `**Flag:**` marca respostas suspeitas: `NENHUM` (normal), `IA`, `INJECAO`, `GIBBERISH`.
+  Regra: `Flag` ≠ `NENHUM` exige **Classificação `INCORRETO` e `Score` 0**; a IA só arma
+  uma Flag com **prova explícita** (texto mandando a IA fazer algo, marcadores óbvios de IA,
+  sem sentido). `**Revisão:**` = `NAO` ou `SIM - motivo` quando merece atenção do professor.
 - Exemplos completos e funcionais em `exemplos/` (dados fictícios).
 
 ### O que acontece com uma entrada mal preenchida, faltando campo ou com valor inesperado?
@@ -86,6 +97,9 @@ Ela **nunca chega ao portal**. Entradas com problema ficam em `revisao.md` com o
 | Classificação ausente ou palavra desconhecida (`AGUARDANDO`, banana…) | revisão manual |
 | Score ausente, não numérico ou fora de 0–100 | revisão manual |
 | Score incoerente com a classificação (80+ Correto; 65–79 Parcial; <65 Incorreto) | revisão manual |
+| `Flag` ausente/inválida ou ainda `AGUARDANDO` | revisão manual |
+| `Flag` = IA/INJECAO/GIBBERISH com classificação ≠ INCORRETO ou Score ≠ 0 | revisão manual |
+| `Revisão` = `SIM` (IA mesmo pediu atenção) | revisão manual |
 | Enunciado ou resposta alterados pela IA (comparação com `answers.json`) | revisão manual |
 | Atividade sinalizada pelo pré-filtro e devolvida como CORRETO | revisão manual |
 | Ref que não existe em `answers.json` | revisão manual |
