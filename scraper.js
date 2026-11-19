@@ -15,7 +15,7 @@
 // Uso:
 //   npm run scrape            (lotes de 8 atividades)
 //   npm run scrape -- --lote 5 --all
-// Requer: session.json (rode `npm run login` antes).
+// Requer: login manual nesta execução (o wizard faz antes de coletar).
 // ============================================================
 const fs = require('fs');
 const path = require('path');
@@ -35,11 +35,8 @@ const loteSize = parseInt(arg('lote', String(CFG.LOTE_SIZE || 10)), 10) || 10;
 (async () => {
   console.log('🚀 CNA Corretor — scrape (coleta de atividades escritas)');
 
-  if (!fs.existsSync(CFG.STATE_FILE)) {
-    console.error('❌ Sessão não encontrada. Rode primeiro:  npm run login');
-    process.exit(1);
-  }
-
+  // A autenticação vem da sessão TEMPORÁRIA desta execução (criada pelo login).
+  // Não existe mais session.json: o wizard sempre faz login antes de coletar.
   const { browser, page } = await launch({ headless: CFG.HEADLESS === true });
   const classes = [];
   const captureFailures = []; // { ref, turma, aluno, title }

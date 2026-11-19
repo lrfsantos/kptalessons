@@ -8,8 +8,10 @@ não cobra nada e não envia dados para nenhum serviço pago.
 
 1. **Abra a pasta** `Corretor CNA` e dê **dois cliques** em `Corrigir.cmd`. Não precisa
    instalar nada: Node.js, Playwright e o navegador já vêm dentro da pasta.
-2. **Primeira vez:** o programa abre um navegador. Faça login com a **sua conta CNA**.
-   Sua senha não é guardada; só a sessão fica salva no seu computador.
+2. **Toda vez:** o programa abre um navegador **novo** na tela de login do CNA. Faça login
+   com a sua conta. O programa reconhece sozinho quando o login termina (não precisa apertar
+   ENTER) e começa a coletar. **Ao fechar, nada da sua sessão fica salvo** — na próxima vez
+   será preciso login de novo. Sua senha nunca é pedida nem guardada.
 3. O programa **coleta as atividades pendentes** e cria os arquivos na pasta `lotes/`.
 4. **Envie cada arquivo Markdown para a IA** que você preferir e salve o retorno na pasta
    `lotes/` com o nome indicado na tela (por exemplo `lote-01.devolvido.md`).
@@ -21,29 +23,13 @@ não cobra nada e não envia dados para nenhum serviço pago.
 
 Cada professor deve usar a **sua própria cópia da pasta** e a **sua própria conta CNA**.
 
-## Sua conta nesta instalação
+## Login toda vez (sem contas salvas)
 
-Na primeira vez, depois do login, o programa pergunta **como você quer ser identificado(a)**
-(por exemplo: Luiz). Só esse nome e a sessão ficam salvos no seu computador — nunca sua senha.
-
-Nas próximas vezes, aparece:
-
-```text
-Olá, Luiz!
-
-Há uma conta salva nesta instalação.
-
-- Continuar como Luiz
-- Trocar de conta
-```
-
-- **Continuar**: o programa confere no portal se a sessão ainda vale. Se expirou, abre o login
-  de novo. Só começa a coletar depois de confirmar que você está autenticado(a).
-- **Trocar de conta**: apaga a identificação e a sessão anteriores (cookies) e abre um navegador
-  novo, sem nenhum dado da conta anterior. Depois pede o nome do novo professor e faz o login.
-  Nada de alunos, lotes ou relatórios é apagado.
-- Se existir uma sessão antiga sem nome associado, o programa pergunta se você quer continuar
-  com ela ou trocar de conta.
+Não existe cadastro de professor, nome salvo, troca de conta nem sessão entre execuções.
+Cada vez que você abre o programa, ele cria um navegador novo e pede login. Os dados de
+autenticação ficam só durante a execução, em `%TEMP%`, e são apagados ao fechar (também em
+caso de erro). Nada de cookies, senha ou e-mail fica no computador ou vai para o GitHub.
+Se versões antigas deixaram arquivos `session.json`/`account.json`, eles não são mais usados e podem ser apagados com segurança.
 
 As respostas são mascaradas antes de irem para a IA (e-mails, telefones e nomes viram marcadores
 como `[EMAIL]`). O programa não promete corrigir tudo automaticamente: o que não passa nas
@@ -62,9 +48,9 @@ verificações continua exigindo atenção.
 
 ## Fluxo completo
 
-1. **Login manual** — `npm run login`. Abre o navegador, o professor loga com a própria
-   conta e a sessão (cookies) fica salva em `session.json` (fora do git). Nenhuma senha
-   fica no programa.
+1. **Login manual (toda vez)** — `npm run login`. Abre um navegador NOVO, o professor loga com a
+   própria conta; o estado fica só nesta execução, em `%TEMP%`, e é descartado ao fechar.
+   Nenhuma senha fica no programa.
 2. **Coleta** — `npm run scrape`. O programa navega o portal sozinho (turmas → alunos →
    lições pendentes), captura **enunciado e resposta** de cada atividade escrita
    pendente, e gera:
@@ -92,7 +78,7 @@ Requisitos: Node.js ≥ 18 e Microsoft Edge (ou Chrome/Chromium).
 
 ```bash
 npm install          # instala playwright-core
-npm run login        # 1ª vez: login manual, salva session.json
+npm run login        # login manual (contexto novo, toda vez)
 npm run corrigir     # o fluxo completo de uma vez (ver abaixo)
 npm run scrape       # só coleta pendências (etapas separadas)
 npm run apply        # valida e finaliza no portal
@@ -119,8 +105,8 @@ dá duplo clique em **`Corrigir.cmd`**:
 1. Copie a pasta `corretor cna` para o computador do professor (pen drive, rede, nuvem)
 2. Abra a pasta → duplo clique em **`Corrigir.cmd`** — ele usa o Node e o navegador que vêm
    dentro da própria pasta (nada é instalado no computador)
-3. Primeira vez lá: ele abre o login do portal — o professor digita a **própria conta dele**
-   e a sessão fica salva só naquele PC
+3. Toda vez: ele abre o login do portal — o professor digita a **própria conta dele**
+   (nada fica salvo; na próxima vez é preciso logar de novo)
 4. O programa coleta, **monitora a pasta sozinho** (sem apertar ENTER) e, quando todos os
    lotes devolvidos estiverem válidos, aplica e finaliza automaticamente
 
@@ -130,7 +116,7 @@ Se quiser um atalho na Área de Trabalho do outro PC: clique com o direito em
 `Corrigir.cmd` → Enviar → Área de Trabalho.
 
 **NÃO copie** (são dados seus/dos seus alunos, e não pertencem ao outro PC):
-`session.json`, `answers.json`, `lotes/`, `revisao.md`, `report.json`, `relatorio-ia.md`,
+`answers.json`, `lotes/`, `revisao.md`, `report.json`, `relatorio-ia.md`,
 `all_answers.txt`, `debug_*.html`. O que vai na pasta: programa, INJECT, exemplos fictícios,
 testes, dependências e este README.
 
@@ -212,10 +198,10 @@ Sinônimos aceitos na classificação: `ERRADO`/`MISS` → INCORRETO; `INCOMPLET
 
 ### Como o login no site é tratado?
 
-Manual, pelo professor, uma vez: `npm run login` abre o Edge, o professor digita as
-credenciais e o programa salva **apenas os cookies da sessão** em `session.json`
-(`.gitignore` cobre o arquivo). O programa nunca pede nem armazena senha; quando a
-sessão expira, o professor roda `npm run login` de novo.
+Manual, pelo professor, **em toda execução**: o programa abre o Chromium portátil num contexto
+novo, o professor digita as credenciais **no próprio site**, e o programa detecta o login e
+continua sozinho. A sessão existe só durante a execução (arquivo temporário em `%TEMP%`) e é
+descartada ao fechar — inclusive após erro. Nenhum cookie, senha ou e-mail fica salvo.
 
 ### Qual ferramenta de OCR é usada?
 
@@ -271,7 +257,8 @@ Só no **terminal** (nenhum arquivo de log). O registro contém: contador da ent
 ref `[C… S… U… L… A…]`, status (preenchida / falhou / revisão) e motivo curto.
 **Nunca** contém: respostas de alunos, feedbacks gerados, cookies, senhas ou tokens.
 Arquivos com dados de alunos (`answers.json`, `lotes/`, `revisao.md`, `report.json`,
-`relatorio-ia.md`, `session.json`) ficam no `.gitignore`.
+`relatorio-ia.md`) ficam no `.gitignore`. A sessão de login fica só em `%TEMP%` e é apagada
+ao fechar — nunca é commitada.
 
 ## Segurança contra injeção de prompt
 
@@ -310,7 +297,7 @@ e a turma só pelo código (`## Turma: C000002`); o mapeamento código→nome fi
 MD: e-mails → `[EMAIL]`, telefones brasileiros → `[TELEFONE]`, CPF → `[CPF]`, links →
 `[LINK]` e o nome do próprio aluno → `[NOME]`. O texto cru fica só em `answers.json`.
 
-**Nunca sai da máquina:** senhas, cookies/sessão (`session.json`), nomes de alunos e
+**Nunca sai da máquina:** senhas, credenciais de login (não persistem), nomes de alunos e
 turmas, respostas cruas e qualquer dado real. O terminal, `revisao.md` e `report.json` são
 locais e podem mostrar o necessário para a revisão.
 
@@ -336,13 +323,13 @@ ou o texto não baterem, a entrada cai em revisão e **não** é contada como pr
 ## Estrutura
 
 ```
-├── login.js                  # login manual -> session.json (fora do git)
+├── login.js                  # login manual (contexto novo, sessão só em %TEMP%)
 ├── scraper.js                # coleta pendências -> answers.json + lotes/*.md
 ├── executor.js               # valida lotes devolvidos e preenche no portal
 ├── instrucoes_correcao.md    # INJECT (template com {{NONCE}}) embutido no MD
 ├── lib/
 │   ├── config.js             # caminhos/URLs/constantes
-│   ├── browser.js            # lançamento do navegador com sessão salva
+│   ├── browser.js            # navegador novo (sem perfil persistente)
 │   ├── portal.js             # navegação + leitura + preenchimento (data-sel)
 │   ├── md.js                 # geração dos lotes + parser do MD devolvido
 │   └── guard.js              # pré-filtro de injeção + validação de entradas
