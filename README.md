@@ -66,6 +66,22 @@ arquivos do fluxo. Nada fica fora dela:
 O professor abre a pasta, dá duplo clique e o programa coleta no portal, espera o passo da
 IA e aplica + finaliza as PRONTAS sozinho — sem abrir terminal.
 
+## Levar para outro computador (outro professor)
+
+A pasta `cna-corretor` é autocontida: copie a pasta inteira para qualquer PC com
+**Node.js ≥ 18 e Microsoft Edge (ou Chrome)** e ela roda. Passos:
+
+1. Instale Node.js ≥ 18 (nodejs.org) — Edge/Chrome já vêm geralmente no Windows
+2. Copie a pasta `cna-corretor` (com `node_modules`) para o computador do professor
+3. Abra a pasta → duplo clique em **`Corrigir atividades CNA.lnk`** (ou `Corrigir.cmd`)
+4. Primeira vez lá: ele pede o `npm run login` — o professor loga com a conta dele, e a
+   sessão fica salva só naquele PC (`session.json`, nunca sai da máquina)
+
+**NÃO copie** (são dados seus/dos seus alunos, e não pertencem ao outro PC):
+`session.json`, `answers.json`, `lotes/`, `revisao.md`, `report.json`, `relatorio-ia.md`,
+`all_answers.txt`, `debug_*.html`. O que vai na pasta: programa, INJECT, exemplos fictícios,
+testes, dependências e este README.
+
 ## Um comando só: `npm run corrigir`
 
 ```
