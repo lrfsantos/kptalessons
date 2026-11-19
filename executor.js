@@ -173,13 +173,13 @@ function indexOriginals(data) {
           continue;
         }
 
-        // 3.2: se a atividade já estiver corrigida no portal, reconhecer como
-        // concluída e NÃO clicar em Finalizar de novo.
-        const jaCorrigida = await portal.isCorrected(page);
-        if (jaCorrigida) {
+        // 3.2: só reconhece "já corrigida" com EVIDÊNCIA POSITIVA do portal.
+        // Status próprio: não é uma finalização feita nesta execução.
+        if (await portal.isCorrected(page)) {
+          r.status = 'JA_CORRIGIDA';
           r.finalized = true;
           filled.push(r);
-          console.log(`já estava CORRIGIDA no portal — registrada, sem novo clique`);
+          console.log(`já estava CORRIGIDA no portal — registrada como concluída, sem novo clique`);
           continue;
         }
 
@@ -202,7 +202,9 @@ function indexOriginals(data) {
   // ---- Relatório (médias/contagens SEMPRE calculadas aqui) ------
   // REGRA ABSOLUTA: só entra em appliedRefs quem teve a finalização CONFIRMADA
   // (r.finalized). Nunca gravar refs de preenchidas-sem-finalizar.
-  const aplicadas = filled.filter(r => r.finalized && r.status === 'PRONTA');
+  const aplicadas = filled.filter(r => r.finalized && (r.status === 'PRONTA' || r.status === 'JA_CORRIGIDA'));
+  const finalizadasAgora = aplicadas.filter(r => r.status === 'PRONTA' && r.finalized);
+  const jaCorrigidas = aplicadas.filter(r => r.status === 'JA_CORRIGIDA');
   if (aplicadas.length) {
     data.appliedRefs = [...new Set([...applied, ...aplicadas.map(r => r.ref)])];
     fs.writeFileSync(CFG.ANSWERS_FILE, JSON.stringify(data, null, 2));
@@ -213,15 +215,16 @@ function indexOriginals(data) {
     geradoEm: new Date().toISOString(),
     totalEntradas: results.length,
     prontas: stat(),
-    preenchidasNoPortal: aplicadas.length,
+    preenchidasNoPortal: filled.filter(r => r.status === 'PRONTA').length,
     jaAplicadasAntes: results.filter(r => r.status === 'JA_APLICADA').length,
     finalizarAtivado: true,
-    finalizadasNoPortal: aplicadas.length,
+    finalizadasNestaExecucao: finalizadasAgora.length,
+    jaCorrigidasNoPortal: jaCorrigidas.length,
     falhasFinalizacao,
     notaPedidoProfessor: 'Finalização automática obrigatória (decisão do professor): só entram em appliedRefs as atividades com finalização CONFIRMADA no portal.',
     revisaoManual: results.filter(r => r.status === 'REVISAO').length,
     lotesNaoDevolvidos: inspected.missingBatches.map(n => String(n).padStart(2, '0')),
-    jaCorrigidas: results.filter(r => /já está corrigida/.test((r.reasons || []).join(' '))).length,
+    jaCorrigidas: jaCorrigidas.length,
     incoerentes: results.filter(r => /incoerente|Flag\b|marcou revis/.test((r.reasons || []).join(' '))).length,
     mediaScore: aplicadas.length ? Math.round(aplicadas.reduce((a, r) => a + (r.score || 0), 0) / aplicadas.length) : null,
     porClassificacao: aplicadas.reduce((acc, r) => { acc[r.classification] = (acc[r.classification] || 0) + 1; return acc; }, {}),
@@ -249,7 +252,8 @@ function indexOriginals(data) {
   console.log('='.repeat(48));
   console.log(`  Total de entradas        : ${stats.totalEntradas}`);
   console.log(`  Preenchidas no portal    : ${stats.preenchidasNoPortal}`);
-  console.log(`  FINALIZADAS pelo programa: ${stats.finalizadasNoPortal}`);
+  console.log(`  FINALIZADAS nesta execução: ${stats.finalizadasNestaExecucao}`);
+  console.log(`  Já corrigidas no portal  : ${stats.jaCorrigidasNoPortal} (sem novo clique)`);
   console.log(`  Em revisão manual        : ${stats.revisaoManual}`);
   if (stats.falhasFinalizacao) console.log(`  Falhas de finalização    : ${stats.falhasFinalizacao} (NÃO registradas como concluídas)`);
   if (stats.jaAplicadasAntes) console.log(`  Já aplicadas (ignoradas) : ${stats.jaAplicadasAntes}`);
