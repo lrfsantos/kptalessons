@@ -55,6 +55,14 @@ npm run apply        # valida e finaliza no portal
 npm test             # testes do parser e da guarda (não acessam a rede)
 ```
 
+## O botão do professor: duplo clique e roda
+
+- **`Corrigir.cmd`** (na pasta do projeto) — duplo clique e roda `npm run corrigir`
+- **"Corrigir atividades CNA"** (atalho na Área de Trabalho) — duplo clique idem
+
+O professor não precisa abrir terminal nem saber a pasta: duplo clique, janela abre, o
+programa coleta no portal, espera o passo da IA e aplica + finaliza as PRONTAS sozinho.
+
 ## Um comando só: `npm run corrigir`
 
 ```
