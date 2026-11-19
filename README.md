@@ -184,10 +184,23 @@ não está pronto". Se o OCR falhar ou devolver lixo (quando existir), a respost
 
 ### Quantas entradas por MD? Existe divisão em lotes?
 
-Sim. `LOTE_SIZE` (padrão **8** atividades por lote, ajustável por variável de ambiente).
-Cada lote é um arquivo independente com INJECT + nonce próprios, para caber no contexto de
-IAs gratuitas. **Recomendado: no máximo 12 atividades por arquivo** (o padrão 8 já está
-dentro disso). O professor pode corrigir um lote por vez.
+Sim. **Padrão: 10 atividades por lote; teto fixo de 10.** `LOTE_SIZE` pode reduzir, nunca
+ultrapassar 10. Cada lote é um arquivo independente com INJECT + nonce próprios, para caber
+no contexto de IAs gratuitas. O professor pode corrigir um lote por vez; 11 atividades geram
+`lote-01.md` e `lote-02.md`.
+
+### Como o programa sabe que o lote devolvido é da coleta atual?
+
+Cada coleta gera um **nonce novo** e grava em `answers.json` a identidade da rodada: nonce,
+número/nome de cada lote e as refs esperadas. O `apply` só aceita arquivos chamados exatamente
+`lote-NN.devolvido.md` (dois dígitos) e rejeita nonce errado, lote de coleta anterior, refs
+ausentes ou estranhas, refs duplicadas e arquivos repetidos. Lotes ainda não devolvidos são
+listados; o professor pode devolvê-los depois e rodar de novo — o que já foi aplicado é
+registrado em `answers.json` (`appliedRefs`) e não é aplicado duas vezes.
+
+Ao iniciar uma coleta nova, os lotes e devolvidos anteriores são movidos para um único
+arquivo `historico-<data>.md` na pasta `lotes/` (com os nomes originais), fora do alcance do
+`apply`. Nada da coleta antiga é apagado ou misturado à nova.
 
 ### Alguma nota pode ser lançada sem o professor revisar? Como funciona a etapa antes do Finalizar?
 
@@ -315,8 +328,9 @@ navegando, nada é fixo no código.
 - **Auditoria de 2026-11 (T1–T10) aplicada**: parser orientado ao marcador (T1), corte do
   feedback (T2), tolerância a cerca de código (T3), INJECT oficial (T4), regras T5 em
   código, fail-safe antes de preencher (T6), relatório da IA em `relatorio-ia.md` (T7),
-  `LOTE_SIZE` padrão 8 / recomendado ≤12 (T8), testes + README (T9) e privacidade do MD
-  com máscaras (T10). Testes: 46 passando.
+  `LOTE_SIZE` padrão 10 (teto 10) + identificação de coleta/nonce, arquivamento de lotes
+  antigos, login automático no wizard, distribuição autocontida; testes + README (T9) e
+  privacidade do MD com máscaras (T10). Testes: 68 passando.
 - **Execução ponta a ponta real ainda não rodou com o fail-safe T6** — o fluxo no portal
   (coleta e preenchimento) foi mapeado e o cabeçalho real conferido no HTML, mas o `apply`
   completo com as verificações (a)/(b)/(d) ainda não rodou em produção.

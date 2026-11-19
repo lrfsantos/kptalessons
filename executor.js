@@ -50,7 +50,10 @@ function indexOriginals(data) {
 }
 
 (async () => {
-  console.log('🚀 CNA Corretor — apply (preenche correções; NÃO finaliza)');
+  console.log('🚀 CNA Corretor — apply');
+  console.log(FINALIZAR
+    ? '⚠️  PADRÃO: preenche E FINALIZA as atividades PRONTAS no portal (ação irreversível).'
+    : 'ℹ️  --sem-finalizar: preenche, mas NÃO finaliza nenhuma atividade.');
 
   const files = findReturnedFiles();
   if (!files.length) {
@@ -63,6 +66,23 @@ function indexOriginals(data) {
   }
 
   const data = JSON.parse(fs.readFileSync(CFG.ANSWERS_FILE, 'utf8'));
+  const collection = data.collection;
+  if (!collection || !collection.nonce || !Array.isArray(collection.batches)) {
+    console.error('❌ answers.json sem identidade de coleta. Rode:  npm run scrape');
+    process.exit(1);
+  }
+  const applied = new Set(data.appliedRefs || []);
+  // T12: valida cada devolvido contra a coleta atual antes de qualquer navegação.
+  const inspected = mdrv.inspectReturnedBatches(files.map(f => ({ path: f })), collection);
+  for (const f of inspected.files) {
+    if (f.issues.length) console.log(`⚠️  ${f.name}: ${f.issues.join('; ')}`);
+  }
+  if (inspected.missingBatches.length)
+    console.log(`ℹ️  Lotes ainda não devolvidos: ${inspected.missingBatches.map(n => String(n).padStart(2, '0')).join(', ')}`);
+  if (inspected.duplicateRefs.length)
+    console.log(`⚠️  Refs duplicadas nos devolvidos: ${inspected.duplicateRefs.join(', ')}`);
+  const fileIssues = new Map();
+  for (const f of inspected.files) if (f.issues.length) fileIssues.set(f.name, f.issues.join('; '));
   const originals = indexOriginals(data);
   const entries = mdrv.parseReturned(files);
   console.log(`📄 ${entries.length} entrada(s) em ${files.length} arquivo(s).`);
@@ -78,10 +98,20 @@ function indexOriginals(data) {
     const orig = original ? {
       question: original.lesson.question || '',
       answer: original.lesson.answer || '',
+      answerMasked: mdrv.maskAnswer(original.lesson.answer, original.student && original.student.name),
     } : null;
 
+    const issuesArquivo = e.sourceFile ? fileIssues.get(path.basename(e.sourceFile)) : null;
+    if (issuesArquivo) {
+      results.push({ ...e, status: 'REVISAO', reasons: [`lote devolvido inválido: ${issuesArquivo}`] });
+      continue;
+    }
     if (e.error) {
       results.push({ ...e, status: 'REVISAO', reasons: [e.error] });
+      continue;
+    }
+    if (e.ref && applied.has(e.ref)) {
+      results.push({ ...e, status: 'JA_APLICADA', reasons: ['já preenchida/finalizada nesta coleta — não aplicar de novo'] });
       continue;
     }
     if (e.ref && dupRefs.has(e.ref)) {
@@ -170,18 +200,25 @@ function indexOriginals(data) {
 
   // ---- Relatório (médias/contagens SEMPRE calculadas aqui) ------
   const aplicadas = filled.filter(r => r.status === 'PRONTA');
+  // Registra o que já foi aplicado para um re-run não duplicar atividades.
+  if (aplicadas.length) {
+    data.appliedRefs = [...new Set([...applied, ...aplicadas.map(r => r.ref)])];
+    fs.writeFileSync(CFG.ANSWERS_FILE, JSON.stringify(data, null, 2));
+  }
   const stat = n => results.filter(r => r.status === 'PRONTA').length;
   const stats = {
     geradoEm: new Date().toISOString(),
     totalEntradas: results.length,
     prontas: stat(),
     preenchidasNoPortal: aplicadas.length,
+    jaAplicadasAntes: results.filter(r => r.status === 'JA_APLICADA').length,
     finalizarAtivado: FINALIZAR,
     finalizadasNoPortal: aplicadas.filter(r => r.finalized).length,
     notaPedidoProfessor: FINALIZAR
       ? 'Modo finalizar PADRÃO: por decisão explícita do professor (2026-11-19), após preencher o programa também clicou em Finalizar em cada atividade preenchida (irreversível). Entradas em revisao.md NÃO foram finalizadas.'
       : 'Run com --sem-finalizar: o programa NÃO finalizou nada (preencheu e parou). O professor finalizará manualmente no portal.',
     revisaoManual: results.filter(r => r.status === 'REVISAO').length,
+    lotesNaoDevolvidos: inspected.missingBatches.map(n => String(n).padStart(2, '0')),
     jaCorrigidas: results.filter(r => /já está corrigida/.test((r.reasons || []).join(' '))).length,
     incoerentes: results.filter(r => /incoerente|Flag\b|marcou revis/.test((r.reasons || []).join(' '))).length,
     mediaScore: aplicadas.length ? Math.round(aplicadas.reduce((a, r) => a + (r.score || 0), 0) / aplicadas.length) : null,
@@ -197,6 +234,8 @@ function indexOriginals(data) {
     ? '_Neste run o programa finalizou as atividades PRONTAS (padrão por decisão do professor, 2026-11-19). As entradas abaixo NÃO foram preenchidas nem finalizadas — revise e finalize você mesmo(a)._\n\n'
     : '_Run com --sem-finalizar: o programa NÃO finalizou atividades. Revise cada caso abaixo no portal e finalize você mesmo(a)._\n\n';
   if (!rev.length) revisao += FINALIZAR ? '_Nenhuma revisão pendente. Todas as entradas válidas foram preenchidas e finalizadas._\n' : '_Nenhuma. Todas as entradas válidas foram preenchidas (não finalizadas)._\n';
+  if (inspected.missingBatches.length)
+    revisao += `- Lotes ainda não devolvidos nesta coleta: ${inspected.missingBatches.map(n => String(n).padStart(2, '0')).join(', ')}\n\n`;
   for (const r of rev) {
     revisao += `## ${r.title || '(sem título)'} [${r.ref || 'sem ref'}]\n\n`;
     revisao += `- Fonte: ${r.sourceFile || '(entrada colada)'}\n`;
@@ -212,6 +251,8 @@ function indexOriginals(data) {
   console.log(`  Preenchidas no portal    : ${stats.preenchidasNoPortal}`);
   if (FINALIZAR) console.log(`  FINALIZADAS pelo programa: ${stats.finalizadasNoPortal} (padrão por decisão do professor)`);
   console.log(`  Em revisão manual        : ${stats.revisaoManual}`);
+  if (stats.jaAplicadasAntes) console.log(`  Já aplicadas (ignoradas) : ${stats.jaAplicadasAntes}`);
+  if (stats.lotesNaoDevolvidos.length) console.log(`  Lotes não devolvidos     : ${stats.lotesNaoDevolvidos.join(', ')}`);
   console.log(`  Média de score           : ${stats.mediaScore ?? '—'}`);
   console.log(`  Por classificação        : ` + (Object.entries(stats.porClassificacao).map(([k, v]) => `${k}=${v}`).join(' | ') || '—'));
   console.log(`  Por flag (devolvido)     : ` + (Object.entries(stats.porFlag).map(([k, v]) => `${k}=${v}`).join(' | ') || '—'));
