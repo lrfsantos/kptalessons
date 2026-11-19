@@ -19,8 +19,33 @@ não cobra nada e não envia dados para nenhum serviço pago.
 6. Atividades suspeitas ou inválidas **não são finalizadas**: ficam explicadas em `revisao.md`
    para você decidir com calma.
 
-Cada professor deve usar a **sua própria cópia da pasta** e a **sua própria conta CNA**. As
-respostas são mascaradas antes de irem para a IA (e-mails, telefones e nomes viram marcadores
+Cada professor deve usar a **sua própria cópia da pasta** e a **sua própria conta CNA**.
+
+## Sua conta nesta instalação
+
+Na primeira vez, depois do login, o programa pergunta **como você quer ser identificado(a)**
+(por exemplo: Luiz). Só esse nome e a sessão ficam salvos no seu computador — nunca sua senha.
+
+Nas próximas vezes, aparece:
+
+```text
+Olá, Luiz!
+
+Há uma conta salva nesta instalação.
+
+- Continuar como Luiz
+- Trocar de conta
+```
+
+- **Continuar**: o programa confere no portal se a sessão ainda vale. Se expirou, abre o login
+  de novo. Só começa a coletar depois de confirmar que você está autenticado(a).
+- **Trocar de conta**: apaga a identificação e a sessão anteriores (cookies) e abre um navegador
+  novo, sem nenhum dado da conta anterior. Depois pede o nome do novo professor e faz o login.
+  Nada de alunos, lotes ou relatórios é apagado.
+- Se existir uma sessão antiga sem nome associado, o programa pergunta se você quer continuar
+  com ela ou trocar de conta.
+
+As respostas são mascaradas antes de irem para a IA (e-mails, telefones e nomes viram marcadores
 como `[EMAIL]`). O programa não promete corrigir tudo automaticamente: o que não passa nas
 verificações continua exigindo atenção.
 

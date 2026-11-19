@@ -13,8 +13,23 @@
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const readline = require('readline');
 const CFG = require('./lib/config');
 const md = require('./lib/md');
+const account = require('./lib/account');
+const portal = require('./lib/portal');
+
+const ask = q => new Promise(res => {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  rl.question(q, a => { rl.close(); res(String(a || '').trim()); });
+});
+
+// Decide o estado da conta sem efeito colateral (testável).
+function accountState({ hasName, hasSession }) {
+  if (hasName && hasSession) return 'EXISTENTE';
+  if (!hasName && hasSession) return 'LEGADO';
+  return 'PRIMEIRA';
+}
 
 const POLL_MS = 1500;          // intervalo curto de verificação
 const STABLE_CHECKS = 2;       // verificações consecutivas de tamanho/mtime
@@ -91,26 +106,80 @@ function validados(collection) {
   return { bons, ruins: result.files.filter(f => !f.usable), estaveis: nomesEstaveis.length };
 }
 
-module.exports = { refsFinalizadas, snapshotArquivos, stableTracker, coletaIncompleta };
+module.exports = { refsFinalizadas, snapshotArquivos, stableTracker, coletaIncompleta, accountState };
 
 if (require.main === module) {
 (async () => {
   console.log('CORRETOR CNA');
   console.log('============\n');
 
-  // 1. Coleta (ou retomada) — login automático se a sessão faltar/expirar.
+  // 0. Conta ativa: primeira vez, retomada, sessão expirada ou troca.
+  let acc = account.readAccount();
+  let state = accountState({ hasName: Boolean(acc), hasSession: account.hasSessionFile() });
+
+  if (state === 'LEGADO') {
+    console.log('Existe uma sessão anterior sem identificação nesta instalação.');
+    const resp = (await ask('Deseja continuar usando essa sessão ou trocar de conta? (continuar/trocar): ')).toLowerCase();
+    if (resp.startsWith('trocar')) {
+      account.clearAuth(); // limpa SOMENTE auth (nunca dados de aluno)
+      state = 'PRIMEIRA';
+    } else {
+      const nome = await ask('Como você quer ser identificado(a)? Ex.: Luiz\nNome: ');
+      account.saveAccount(nome);
+      acc = account.readAccount();
+      state = 'EXISTENTE';
+    }
+  }
+
+  for (;;) {
+    if (state === 'PRIMEIRA') {
+      console.log('Nenhuma conta configurada. Vamos fazer o primeiro login.\n');
+      if (!run('login.js')) { console.error('\nNão foi possível concluir o login.'); process.exit(1); }
+      acc = account.readAccount();
+      state = 'EXISTENTE';
+      break;
+    }
+
+    // EXISTENTE: saudação, Continuar ou Trocar. A existência do arquivo não
+    // prova que a sessão serve — validamos no portal antes de coletar.
+    console.log(`Olá, ${acc.name}!`);
+    console.log('\nHá uma conta salva nesta instalação.');
+    console.log('\n- Continuar como ' + acc.name);
+    console.log('- Trocar de conta');
+    const escolha = (await ask('\nO que deseja? (continuar/trocar): ')).toLowerCase();
+
+    if (escolha.startsWith('trocar')) {
+      // Encerra/contexto fresco: clearAuth remove cookies e nome antigos.
+      account.clearAuth();
+      console.log('\nSessão e identificação anteriores removidas. Nada de alunos/relatórios foi apagado.');
+      state = 'PRIMEIRA';
+      continue;
+    }
+
+    // Continuar: valida a sessão no portal; se expirada, faz login de novo.
+    console.log('\nVerificando a sessão salva no portal...');
+    let sessaoOk = false;
+    try {
+      const { launch } = require('./lib/browser');
+      const { browser, page } = await launch();
+      sessaoOk = await portal.isAuthenticated(page);
+      await browser.close();
+    } catch { sessaoOk = false; }
+    if (sessaoOk) { console.log('Sessão válida. Continuando como ' + acc.name + '.'); break; }
+    console.log('\nSessão expirada ou inválida. Vamos abrir o login novamente.\n');
+    if (!run('login.js')) { console.error('\nNão foi possível concluir o login.'); process.exit(1); }
+    acc = account.readAccount();
+    break;
+  }
+
+  // 1. Coleta (ou retomada) — a conta já garantiu sessão válida.
   let data = readAnswers();
   if (coletaIncompleta(data)) {
     console.log('Coleta anterior incompleta detectada. Retomando...\n');
     console.log('Os arquivos já recebidos foram preservados.\n');
   } else {
     console.log('Iniciando coleta de atividades...\n');
-    let ok = run('scraper.js');
-    if (!ok) {
-      console.log('\nSessão CNA não encontrada. Abrindo navegador para login...\n');
-      if (!run('login.js')) { console.error('\nNão foi possível fazer login. Tente novamente.'); process.exit(1); }
-      ok = run('scraper.js');
-    }
+    const ok = run('scraper.js');
     if (!ok) { console.error('\nNão consegui coletar do portal. Verifique a conexão e tente novamente.'); process.exit(1); }
     data = readAnswers();
   }

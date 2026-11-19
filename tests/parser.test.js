@@ -139,6 +139,7 @@ test('lotes: padrão 10, teto 10, e 7/10/11/25 atividades', () => {
   assert.equal(count(25, {}), 3);
   assert.equal(count(25, { loteSize: 99 }), 3, 'teto de 10 mesmo com env maior');
   assert.equal(count(25, { loteSize: 4 }), 7, 'variável pode reduzir');
+  assert.equal(count(50, {}), 5, '50 atividades => 5 lotes de 10 (teto preservado)');
   assert.equal(require('../lib/config').LOTE_SIZE, 10);
 });
 

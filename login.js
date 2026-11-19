@@ -1,17 +1,20 @@
 // ============================================================
 // CNA Corretor — LOGIN MANUAL
 // Abre o navegador, o PROFESSOR loga na própria conta e o
-// script salva a sessão em session.json (usado pelo scraper
-// e executor). NENHUMA senha fica no código ou no repositório.
+// script salva a sessão em session.json. Confirma a autenticação
+// no DOM real ANTES de salvar. Se um nome for passado (--nome),
+// associa a conta. NENHUMA senha fica no código ou repositório.
 // ============================================================
 const { chromium } = require('playwright-core');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const { launch } = require('./lib/browser');
+const portal = require('./lib/portal');
+const account = require('./lib/account');
+const CFG = require('./lib/config');
 
-const STATE_FILE = path.join(__dirname, 'session.json');
-const LOGIN_URL = 'https://app.cna.com.br/login';
+const LOGIN_URL = CFG.LOGIN_URL;
 
 function ask(question) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -19,6 +22,9 @@ function ask(question) {
 }
 
 (async () => {
+  const argNome = process.argv.indexOf('--nome');
+  const nomeArg = argNome >= 0 ? (process.argv[argNome + 1] || '').trim() : '';
+
   console.log('🔐 CNA Corretor — Login manual');
   console.log('----------------------------------');
   console.log('1. Uma janela do navegador vai abrir.');
@@ -26,6 +32,7 @@ function ask(question) {
   console.log('3. Depois de logado(a), volte aqui e aperte ENTER.');
   console.log('A sua senha NÃO é salva — apenas a sessão do navegador.\n');
 
+  // Contexto FRESH: nunca reaproveita cookies de outra conta.
   const { browser, context, page, kind } = await launch({ fresh: true });
   console.log(`🌐 Abrindo com ${kind}...`);
 
@@ -33,14 +40,24 @@ function ask(question) {
   console.log('✅ Navegador aberto em:', page.url());
   console.log('\n👉 Faça o login na janela que abriu e depois digite ENTER aqui.\n');
 
-  await ask('Pressione ENTER quando estiver logado(a)... ');
+  for (;;) {
+    await ask('Pressione ENTER quando estiver logado(a)... ');
+    if (await portal.isAuthenticated(page)) break;
+    console.log('⚠️  Ainda não reconheci o login no portal. Faça login e aperte ENTER de novo.');
+  }
 
-  // Salva a sessão
-  await context.storageState({ path: STATE_FILE });
+  // Só salva a sessão DEPOIS da autenticação confirmada no DOM.
+  await context.storageState({ path: CFG.STATE_FILE });
   console.log('\n💾 Sessão salva em session.json');
-  console.log('📢 Aviso: este arquivo contém seus cookies de acesso.');
-  console.log('   Ele está no .gitignore e NUNCA deve ser enviado ao GitHub.');
+
+  let name = nomeArg;
+  if (!name) {
+    name = (await ask('Como você quer ser identificado(a) nesta instalação? Ex.: Luiz\nNome: ')).trim();
+  }
+  account.saveAccount(name);
+  console.log(`👤 Conta identificada como: ${name}`);
+  console.log('📢 A sessão contém cookies de acesso. Está no .gitignore e nunca vai ao GitHub.');
 
   await browser.close();
-  console.log('✅ Pronto! Agora rode:  npm run scrape');
+  console.log('✅ Login concluído.');
 })().catch(e => { console.error('💥 Erro:', e.message); process.exit(1); });

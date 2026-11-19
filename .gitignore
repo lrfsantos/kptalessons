@@ -3,6 +3,7 @@ node_modules/
 
 # Sessão e dados sensíveis — NUNCA subir
 session.json
+account.json
 .env
 *.local
 
