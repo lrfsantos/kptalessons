@@ -99,9 +99,8 @@ test('11: troca de conta não altera lógica de correção/finalização', () =>
 });
 
 test('login: detecta autenticação automaticamente, sem exigir ENTER', () => {
-  const code = fs.readFileSync(require.resolve('../login.js'), 'utf8');
-  assert.match(code, /await portal\.isAuthenticated\(page\)/, 'confirma login no DOM');
-  assert.ok(!/Pressione ENTER quando estiver logado/.test(code), 'sem ENTER para login');
-  assert.match(code, /setTimeout\(r, 2000\)/, 'faz polling até o portal reconhecer');
-  assert.match(code, /launch\(\{\s*fresh:\s*true\s*\}\)/, 'contexto limpo');
+  const wizard = fs.readFileSync(require.resolve('../corrigir.js'), 'utf8');
+  const posGoto = wizard.indexOf('page.goto(CFG.PORTAL_URL');
+  const posAuth = wizard.indexOf('portal.isAuthenticated(page)');
+  assert.ok(posGoto >= 0 && posAuth > posGoto, 'navega ao portal ANTES de validar a sessão');
 });

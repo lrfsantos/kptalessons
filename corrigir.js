@@ -162,6 +162,8 @@ if (require.main === module) {
     try {
       const { launch } = require('./lib/browser');
       const { browser, page } = await launch();
+      // launch() abre em about:blank: é preciso ir ao portal para conferir a sessão.
+      await page.goto(CFG.PORTAL_URL, { waitUntil: 'domcontentloaded', timeout: CFG.NAV_TIMEOUT });
       sessaoOk = await portal.isAuthenticated(page);
       await browser.close();
     } catch { sessaoOk = false; }
