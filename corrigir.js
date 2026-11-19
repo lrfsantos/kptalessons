@@ -95,7 +95,7 @@ if (require.main === module) {
   try {
     // 0. Login manual SEMPRE (contexto novo, sem cookies anteriores).
     console.log('Iniciando com um navegador novo.\n');
-    if (!run('login.js')) { console.error('\nLogin não concluído. Nada foi coletado.'); process.exit(1); }
+    if (!run('login.js')) { console.error('\nLogin não concluído. Nada foi coletado.'); process.exitCode = 1; return; }
 
     // 1. Coleta (ou retomada) — mesma autenticação da execução.
     let data = readAnswers();
@@ -105,10 +105,15 @@ if (require.main === module) {
     } else {
       console.log('\nIniciando coleta de atividades...\n');
       const ok = run('scraper.js');
-      if (!ok) { console.error('\nNão consegui coletar do portal. Verifique a conexão e tente novamente.'); process.exit(1); }
+      if (!ok) { console.error('\nNão consegui coletar do portal. Verifique a conexão e tente novamente.'); process.exitCode = 1; return; }
       data = readAnswers();
     }
-    if (!data || !data.collection) { console.error('\nColeta sem identidade. Rode o programa novamente.'); process.exit(1); }
+    // Conta sem pendências: o scraper encerra sem gravar answers.json.
+    // Isso é normal (não é erro) — encerra com sucesso e o finally limpa a sessão.
+    if (!data || !data.collection) {
+      console.log('\nNenhuma pendência encontrada nesta conta. Nada a corrigir. Até a próxima!');
+      return;
+    }
 
     const collection = data.collection;
     const total = data.classes
@@ -150,9 +155,8 @@ if (require.main === module) {
     console.log('Iniciando aplicação automática...\n');
 
     // 3. Aplica no portal (preenche + FINALIZA as PRONTAS).
-    if (!run('executor.js')) { console.error('\nA aplicação encontrou problemas. Reveja revisao.md.'); process.exit(1); }
+    if (!run('executor.js')) { console.error('\nA aplicação encontrou problemas. Reveja revisao.md.'); process.exitCode = 1; return; }
     console.log('\nPROCESSAMENTO CONCLUÍDO. Confira revisao.md e report.json na pasta do programa.');
-    process.exit(0);
   } finally {
     // Encerramento normal OU inesperado: descarta cookies e arquivos temporários.
     session.cleanup();
