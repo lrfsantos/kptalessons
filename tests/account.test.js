@@ -13,6 +13,12 @@ const CFG = require('../lib/config');
 test('1: primeira execução sem perfil e sem sessão', () => {
   assert.equal(accountState({ hasName: false, hasSession: false }), 'PRIMEIRA');
 });
+test('2b: account.json com BOM (gravado pelo PowerShell) é lido corretamente', () => {
+  fs.writeFileSync(account.ACCOUNT_FILE, '\uFEFF{"name":"Luiza"}', 'utf8');
+  assert.equal(account.readAccount().name, 'Luiza');
+  try { fs.unlinkSync(account.ACCOUNT_FILE); } catch { /* não existia antes */ }
+});
+
 test('3: inicialização com perfil e sessão', () => {
   assert.equal(accountState({ hasName: true, hasSession: true }), 'EXISTENTE');
 });
