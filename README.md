@@ -49,11 +49,22 @@ Requisitos: Node.js ≥ 18 e Microsoft Edge (ou Chrome/Chromium).
 ```bash
 npm install          # instala playwright-core
 npm run login        # 1ª vez: login manual, salva session.json
-npm run scrape       # coleta pendências e gera os lotes MD
-# (professor corrige os lotes com a IA dele e devolve como *.devolvido.md)
-npm run apply        # valida e preenche no portal; professor finaliza
+npm run corrigir     # o fluxo completo de uma vez (ver abaixo)
+npm run scrape       # só coleta pendências (etapas separadas)
+npm run apply        # valida e finaliza no portal
 npm test             # testes do parser e da guarda (não acessam a rede)
 ```
+
+## Um comando só: `npm run corrigir`
+
+```
+npm run corrigir
+```
+1. **Coleta no portal** — o programa abre o site, coleta as respostas e gera `lotes/lote-NN.md`
+2. **Você na IA (manual, por design — sem chave de API)** — cole cada lote na sua IA e salve
+   o retorno como `lotes/lote-NN.devolvido.md`
+3. **Aplica e finaliza** — quando você apertar ENTER, o programa valida e **preenche + finaliza**
+   cada lição PRONTA. Entradas incertas ficam em `revisao.md` (não são preenchidas/finalizadas).
 
 Variáveis opcionais (`.env.example`): `HEADLESS`, `LOTE_SIZE`, `NAV_TIMEOUT` —
 use com `node --env-file=.env scraper.js`.
