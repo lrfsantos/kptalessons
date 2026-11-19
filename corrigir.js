@@ -30,10 +30,20 @@ const temLoteGerado = () => fs.existsSync(CFG.LOTES_DIR)
 (async () => {
   console.log('🚀 CNA Corretor — correção completa (um comando)\n');
 
-  // 1. Coleta no portal
+  // 1. Coleta no portal — se a sessão estiver ausente/expirada, abre o login
+  //    automaticamente e tenta de novo. O professor nunca vê "rode npm run login".
   console.log('── 1/3  Coletando respostas no portal...\n');
-  if (!run('scraper.js')) {
-    console.error('\n❌ Coleta falhou. Verifique a sessão (npm run login) e tente de novo.');
+  let ok = run('scraper.js');
+  if (!ok) {
+    console.log('\n🔑 Sessão ausente ou expirada. Abrindo o login (você digita a SUA conta)...\n');
+    if (!run('login.js')) {
+      console.error('\n❌ Login falhou. Rode este programa de novo e tente novamente.');
+      process.exit(1);
+    }
+    ok = run('scraper.js');
+  }
+  if (!ok) {
+    console.error('\n❌ Não consegui coletar do portal. Verifique sua conexão/login e rode de novo.');
     process.exit(1);
   }
   if (!temLoteGerado()) {

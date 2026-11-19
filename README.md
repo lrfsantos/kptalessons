@@ -68,16 +68,21 @@ IA e aplica + finaliza as PRONTAS sozinho — sem abrir terminal.
 
 ## Levar para outro computador (outro professor)
 
-A pasta `cna-corretor` é autocontida: copie a pasta inteira para qualquer PC com
-**Node.js ≥ 18 e Microsoft Edge (ou Chrome)** e ela roda. Passos:
+A pasta `corretor cna` é **auto-suficiente**: tem o programa, as dependências (`node_modules`)
+e o runtime Node embutido (`runtime/`). O professor não instala **nada** — só abre a pasta e
+dá duplo clique em **`Corrigir.cmd`**:
 
-1. Instale Node.js ≥ 18 (nodejs.org) — Edge/Chrome já vêm geralmente no Windows
-2. Copie a pasta `cna-corretor` (com `node_modules`) para o computador do professor
-3. Abra a pasta → duplo clique em **`Corrigir.cmd`** (o atalho `.lnk` aponta para um caminho
-   absoluto desta máquina e pode não valer lá — o `.cmd` funciona em qualquer lugar;
-   se quiser, clique com o direito nele → Enviar → Área de Trabalho para criar um atalho lá)
-4. Primeira vez lá: ele pede o `npm run login` — o professor loga com a conta dele, e a
-   sessão fica salva só naquele PC (`session.json`, nunca sai da máquina)
+1. Copie a pasta `corretor cna` para o computador do professor (pen drive, rede, nuvem)
+2. Abra a pasta → duplo clique em **`Corrigir.cmd`** — ele detecta tudo que precisa; se a
+   máquina já tiver Node, usa o dela; se não, usa o embutido
+3. Primeira vez lá: ele abre o login do portal — o professor digita a **própria conta dele**
+   e a sessão fica salva só naquele PC
+4. O fluxo roda sozinho: coleta → ele cola na IA → aperta ENTER → programa aplica e finaliza
+
+Único requisito: Microsoft Edge (ou Chrome) — já vem com o Windows.
+
+Se quiser um atalho na Área de Trabalho do outro PC: clique com o direito em
+`Corrigir.cmd` → Enviar → Área de Trabalho.
 
 **NÃO copie** (são dados seus/dos seus alunos, e não pertencem ao outro PC):
 `session.json`, `answers.json`, `lotes/`, `revisao.md`, `report.json`, `relatorio-ia.md`,

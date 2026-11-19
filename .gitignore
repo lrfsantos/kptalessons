@@ -29,3 +29,6 @@ all_answers.txt
 .DS_Store
 Thumbs.db
 *.lnk
+
+# Node portatil (so na pasta de distribuicao; nunca commitar)
+runtime/
