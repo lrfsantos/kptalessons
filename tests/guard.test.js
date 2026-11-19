@@ -2,6 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const { preFilter, validateEntry } = require('../lib/guard');
+const md = require('../lib/md');
 
 // ---------- preFilter ----------
 test('pré-filtro sinaliza injeção em inglês', () => {
@@ -148,6 +149,48 @@ test('T5e: feedback com 2 parágrafos passa', () => {
   const fb = 'Primeiro parágrafo.\n\nSegundo parágrafo.';
   const v = validateEntry({ ...baseValida, feedback: fb, classification: 'PARCIAL', score: 70, flag: 'NENHUM', revisao: { sim: false, motivo: '' } }, original);
   assert.equal(v.ok, true);
+});
+
+test('máscara: resposta contendo e-mail mascarado é aceita sem falso positivo', () => {
+  const ans = 'My email is ana@example.com and I went to the park.';
+  const masked = md.maskAnswer(ans, 'Ana Silva');
+  const v = validateEntry({ ...baseValida, classification: 'CORRETO', score: 90, flag: 'NENHUM', revisao: { sim: false, motivo: '' }, respostaLida: masked }, { question: original.question, answer: ans, answerMasked: masked });
+  assert.equal(v.review, false);
+  assert.ok(!v.reasons.some(x => x.includes('resposta do aluno alterada')));
+});
+
+test('máscara: resposta contendo telefone mascarado é aceita', () => {
+  const ans = 'Call me at (11) 91234-5678. I played soccer.';
+  const masked = md.maskAnswer(ans, 'Ana Silva');
+  const v = validateEntry({ ...baseValida, classification: 'CORRETO', score: 90, flag: 'NENHUM', revisao: { sim: false, motivo: '' }, respostaLida: masked }, { question: original.question, answer: ans, answerMasked: masked });
+  assert.equal(v.review, false);
+});
+
+test('máscara: resposta sem dados pessoais continua igual', () => {
+  const v = validateEntry({ ...baseValida, classification: 'CORRETO', score: 90, flag: 'NENHUM', revisao: { sim: false, motivo: '' } }, { question: original.question, answer: original.answer, answerMasked: original.answer });
+  assert.equal(v.ok, true);
+});
+
+test('máscara: IA preservou os placeholders exatamente => sem divergência', () => {
+  const ans = 'Email [EMAIL], tel [TELEFONE], visite [LINK].';
+  const v = validateEntry({ ...baseValida, classification: 'CORRETO', score: 90, flag: 'NENHUM', revisao: { sim: false, motivo: '' }, respostaLida: ans }, { question: original.question, answer: ans, answerMasked: ans });
+  assert.equal(v.review, false);
+});
+
+test('máscara: IA alterou o conteúdo real => revisão', () => {
+  const ans = 'My email is ana@example.com.';
+  const masked = md.maskAnswer(ans, 'Ana Silva');
+  const v = validateEntry({ ...baseValida, classification: 'CORRETO', score: 90, flag: 'NENHUM', revisao: { sim: false, motivo: '' }, respostaLida: 'My email is [EMAIL] and I won the prize.' }, { question: original.question, answer: ans, answerMasked: masked });
+  assert.equal(v.review, true);
+  assert.ok(v.reasons.some(x => x.includes('resposta do aluno alterada')));
+});
+
+test('máscara: IA removeu/alterou placeholder => revisão', () => {
+  const ans = 'My email is ana@example.com.';
+  const masked = md.maskAnswer(ans, 'Ana Silva');
+  const v = validateEntry({ ...baseValida, classification: 'CORRETO', score: 90, flag: 'NENHUM', revisao: { sim: false, motivo: '' }, respostaLida: 'My email is ana@example.com.' }, { question: original.question, answer: ans, answerMasked: masked });
+  assert.equal(v.review, true);
+  assert.ok(v.reasons.some(x => x.includes('resposta do aluno alterada')));
 });
 
 // ---------- T1: pré-filtro detecta rótulos/marcadores na resposta ----------

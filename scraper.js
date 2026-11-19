@@ -30,7 +30,7 @@ function arg(name, def) {
   return i > -1 && process.argv[i + 1] ? process.argv[i + 1] : def;
 }
 const onlyPending = !process.argv.includes('--all');
-const loteSize = parseInt(arg('lote', String(CFG.LOTE_SIZE || 8)), 10) || 8;
+const loteSize = parseInt(arg('lote', String(CFG.LOTE_SIZE || 10)), 10) || 10;
 
 (async () => {
   console.log('🚀 CNA Corretor — scrape (coleta de atividades escritas)');
@@ -119,16 +119,19 @@ const loteSize = parseInt(arg('lote', String(CFG.LOTE_SIZE || 8)), 10) || 8;
       return;
     }
 
-    // 4. Salva dados estruturados
+    // 4. Gera os lotes MD (nonce novo + INJECT em cada lote) e salva a
+    //    identidade da coleta junto com os dados estruturados (T12).
+    const { nonce, files, total } = md.buildBatches(classes, { loteSize });
+    const generatedAt = new Date().toISOString();
+    const collection = {
+      id: generatedAt,
+      nonce,
+      batches: files.map(f => ({ num: f.num, name: f.name, refs: f.refs, total: f.entries })),
+    };
     fs.writeFileSync(CFG.ANSWERS_FILE, JSON.stringify({
-      generatedAt: new Date().toISOString(),
-      captureFailures,
-      classes,
+      generatedAt, collection, captureFailures, classes, appliedRefs: [],
     }, null, 2));
     console.log(`💾 answers.json (${classes.reduce((a, c) => a + c.students.length, 0)} aluno(s); ${pendentes} pendência(s)).`);
-
-    // 5. Gera os lotes MD (nonce novo + INJECT em cada lote)
-    const { nonce, files, total } = md.buildBatches(classes, { loteSize });
     console.log(`📄 ${files.length} lote(s) com ${total} atividade(s) em ${path.join(CFG.ROOT, 'lotes')}${path.sep} (nonce ${nonce}).`);
     if (captureFailures.length) {
       console.log(`\n👉 As ${captureFailures.length} atividade(s) não capturadas ficaram de fora do MD.`);

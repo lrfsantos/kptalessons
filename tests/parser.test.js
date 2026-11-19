@@ -124,6 +124,24 @@ test('normalizeFlag e parseRevisao', () => {
   assert.equal(md.parseRevisao('AGUARDANDO'), null);
 });
 
+test('lotes: padrão 10, teto 10, e 7/10/11/25 atividades', () => {
+  const mk = n => ({
+    ids: { classId: '1', studentId: '2', unitId: '3', lessonId: '4', activityId: String(n) },
+    title: 'A' + n, unit: 'Unit 1', pending: true, question: 'Q?', answer: 'A',
+    prefilter: { flagged: false, reasons: [] },
+  });
+  const classes = n => [{ name: 'Turma', shift: 'Noite', classId: '1', students: [{ name: 'Aluno', studentId: '2', pending: n, lessons: Array.from({ length: n }, (_, i) => mk(i + 1)) }] }];
+  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cna-lote-'));
+  const count = (n, opts) => md.buildBatches(classes(n), { outDir: fs.mkdtempSync(path.join(require('os').tmpdir(), 'cna-lote-')), ...opts }).files.length;
+  assert.equal(count(7, {}), 1);
+  assert.equal(count(10, {}), 1);
+  assert.equal(count(11, {}), 2);
+  assert.equal(count(25, {}), 3);
+  assert.equal(count(25, { loteSize: 99 }), 3, 'teto de 10 mesmo com env maior');
+  assert.equal(count(25, { loteSize: 4 }), 7, 'variável pode reduzir');
+  assert.equal(require('../lib/config').LOTE_SIZE, 10);
+});
+
 test('buildBatches inclui pergunta e resposta capturadas (regressão do fluxo do scraper)', () => {
   const l = {
     ids: { classId: '1', studentId: '2', unitId: '3', lessonId: '4', activityId: '5' },
