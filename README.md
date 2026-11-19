@@ -73,7 +73,9 @@ A pasta `cna-corretor` é autocontida: copie a pasta inteira para qualquer PC co
 
 1. Instale Node.js ≥ 18 (nodejs.org) — Edge/Chrome já vêm geralmente no Windows
 2. Copie a pasta `cna-corretor` (com `node_modules`) para o computador do professor
-3. Abra a pasta → duplo clique em **`Corrigir atividades CNA.lnk`** (ou `Corrigir.cmd`)
+3. Abra a pasta → duplo clique em **`Corrigir.cmd`** (o atalho `.lnk` aponta para um caminho
+   absoluto desta máquina e pode não valer lá — o `.cmd` funciona em qualquer lugar;
+   se quiser, clique com o direito nele → Enviar → Área de Trabalho para criar um atalho lá)
 4. Primeira vez lá: ele pede o `npm run login` — o professor loga com a conta dele, e a
    sessão fica salva só naquele PC (`session.json`, nunca sai da máquina)
 
