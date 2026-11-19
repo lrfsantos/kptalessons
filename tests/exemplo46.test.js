@@ -45,7 +45,7 @@ test('exemplo sanitizado: distribuição CORRETO 30 / INCORRETO 8 / PARCIAL 8', 
 test('exemplo sanitizado: retorno único é redistribuído nos cinco lotes', () => {
   const result = md.inspectCombinedReturn(devolvidos.join('\n\n'), collection);
   assert.deepEqual(result.globalIssues, []);
-  assert.deepEqual(result.acceptedBatches.map(b => b.num), [1,2,3,4,5]);
+  assert.deepEqual(result.acceptedBatches.map(b => b.num), [1,2,3,4,5], JSON.stringify({ rejected: result.rejectedBatches, globalIssues: result.globalIssues, missing: result.missingBatches }, null, 2));
   assert.equal(result.acceptedBatches.reduce((sum,b)=>sum+b.activities,0),46);
 });
 
