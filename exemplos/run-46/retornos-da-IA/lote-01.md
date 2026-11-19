@@ -97,13 +97,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 1: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-CORRETO
+**Classificação:** CORRETO
 
-90
+**Score:** 90
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Good work. Your response addresses the task clearly.
@@ -119,13 +119,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 2: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-CORRETO
+**Classificação:** CORRETO
 
-90
+**Score:** 90
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Good work. Your response addresses the task clearly.
@@ -141,13 +141,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 3: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-CORRETO
+**Classificação:** CORRETO
 
-90
+**Score:** 90
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Good work. Your response addresses the task clearly.
@@ -163,13 +163,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 4: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-CORRETO
+**Classificação:** CORRETO
 
-90
+**Score:** 90
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Good work. Your response addresses the task clearly.
@@ -185,13 +185,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 5: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-CORRETO
+**Classificação:** CORRETO
 
-90
+**Score:** 90
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Good work. Your response addresses the task clearly.
@@ -207,13 +207,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 6: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-CORRETO
+**Classificação:** CORRETO
 
-90
+**Score:** 90
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Good work. Your response addresses the task clearly.
@@ -229,13 +229,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 7: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-CORRETO
+**Classificação:** CORRETO
 
-90
+**Score:** 90
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Good work. Your response addresses the task clearly.
@@ -251,13 +251,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 8: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-CORRETO
+**Classificação:** CORRETO
 
-90
+**Score:** 90
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Good work. Your response addresses the task clearly.
@@ -273,13 +273,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 9: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-CORRETO
+**Classificação:** CORRETO
 
-90
+**Score:** 90
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Good work. Your response addresses the task clearly.
@@ -295,13 +295,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 10: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-CORRETO
+**Classificação:** CORRETO
 
-90
+**Score:** 90
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Good work. Your response addresses the task clearly.

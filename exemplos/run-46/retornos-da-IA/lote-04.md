@@ -97,13 +97,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 31: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-INCORRETO
+**Classificação:** INCORRETO
 
-55
+**Score:** 55
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Your response needs to address the task more clearly. Please revise it.
@@ -123,13 +123,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 32: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-INCORRETO
+**Classificação:** INCORRETO
 
-55
+**Score:** 55
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Your response needs to address the task more clearly. Please revise it.
@@ -145,13 +145,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 33: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-INCORRETO
+**Classificação:** INCORRETO
 
-55
+**Score:** 55
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Your response needs to address the task more clearly. Please revise it.
@@ -167,13 +167,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 34: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-INCORRETO
+**Classificação:** INCORRETO
 
-55
+**Score:** 55
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Your response needs to address the task more clearly. Please revise it.
@@ -189,13 +189,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 35: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-INCORRETO
+**Classificação:** INCORRETO
 
-55
+**Score:** 55
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Your response needs to address the task more clearly. Please revise it.
@@ -211,13 +211,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 36: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-INCORRETO
+**Classificação:** INCORRETO
 
-55
+**Score:** 55
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Your response needs to address the task more clearly. Please revise it.
@@ -233,13 +233,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 37: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-INCORRETO
+**Classificação:** INCORRETO
 
-55
+**Score:** 55
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Your response needs to address the task more clearly. Please revise it.
@@ -255,13 +255,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 38: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-INCORRETO
+**Classificação:** INCORRETO
 
-55
+**Score:** 55
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Your response needs to address the task more clearly. Please revise it.
@@ -277,13 +277,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 39: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-PARCIAL
+**Classificação:** PARCIAL
 
-75
+**Score:** 75
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Good start. Complete the missing details and review the language.
@@ -299,13 +299,13 @@ Write three sentences about your last weekend using the past simple.
 Fictional answer number 40: I went to the park and I played soccer with my friends.
 <<<RESPOSTA-FIM-189ce97ca42d>>>
 
-PARCIAL
+**Classificação:** PARCIAL
 
-75
+**Score:** 75
 
-NENHUM
+**Flag:** NENHUM
 
-NAO
+**Revisão:** NAO
 
 **Feedback:**
 Good start. Complete the missing details and review the language.

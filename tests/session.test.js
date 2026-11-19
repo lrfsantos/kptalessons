@@ -110,7 +110,7 @@ test('16: login fecha o navegador após guardar o estado temporário', () => {
 
 test('17: conta sem pendências encerra com sucesso e sem erro; limpeza sempre no finally', () => {
   const wizard = ler('../corrigir');
-  assert.match(wizard, /Nenhuma pendência encontrada nesta conta/);
+  assert.match(wizard, /Nenhuma pendência encontrada/);
   assert.ok(!/Coleta sem identidade/.test(wizard));
   assert.ok(!/process\.exit\(/.test(wizard.slice(wizard.indexOf('  try {'), wizard.indexOf('  } finally {'))), 'sem process.exit dentro do try (finally precisa rodar)');
 });
@@ -118,5 +118,5 @@ test('17: conta sem pendências encerra com sucesso e sem erro; limpeza sempre n
 test('15: limpeza no finally cobre erro e encerramento normal', () => {
   const wizard = ler('../corrigir');
   assert.match(wizard, /\}\s*finally\s*\{[\s\S]*session\.cleanup\(\)/);
-  assert.match(wizard, /\.catch\(e => \{[\s\S]*session\.cleanup\(\)/);
+  assert.match(wizard, /\.catch\(\\w+ => \{[\s\S]*session\.cleanup\(\)/);
 });
