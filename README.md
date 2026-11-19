@@ -12,7 +12,7 @@ não chama IA e não precisa de chave.
 └─────────────┘                └──────────────┘  3. IA devolve o MD   └──────────────┘
        ▲                                                                 │
        │ 4. apply: valida, preenche classificação + feedback             │
-       │    (o professor revisa e clica Finalizar manualmente)           │
+       │    (o programa preenche e Clica em Finalizar; o professor vê revisao.md)   │
        └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -38,7 +38,8 @@ não chama IA e não precisa de chave.
 4. **Aplicação** — `npm run apply`. O programa:
    - valida **cada entrada** (ver "Validação" abaixo);
    - abre a lição no portal, marca a classificação e digita o feedback;
-   - **NÃO clica em Finalizar** — ação irreversível que fica SEMPRE com o professor;
+   - **clica em Finalizar** nas PRONTAS — decisão explícita do professor (2026-11-19); entradas em revisao.md nunca são preenchidas nem finalizadas;
+   - --sem-finalizar desliga o Finalizar para um run (preenche e para);
    - gera `report.json` (estatísticas) e `revisao.md` (o que precisa de atenção humana).
 
 ## Como rodar
@@ -145,14 +146,20 @@ dentro disso). O professor pode corrigir um lote por vez.
 
 ### Alguma nota pode ser lançada sem o professor revisar? Como funciona a etapa antes do Finalizar?
 
-**Não.** O programa **nunca clica em Finalizar** (e nunca clicará: a função não existe no
-código). Ele preenche classificação + feedback e confirma que o botão Finalizar ficou
-habilitado — prova de que o portal aceitou o preenchimento — e **para**. A revisão é
-humana em duas camadas:
+**Sim — decisão explícita do professor (2026-11-19): o programa Finaliza sozinho.** Após
+preencher, o programa clica em Finalizar nas atividades PRONTAS — **nunca** nas de
+`revisao.md` (entradas incertas ficam para revisão humana). A decisão do professor foi
+tomada justamente para o professor não precisar estar lá. `npm run apply -- --sem-finalizar`
+desativa o Finalizar para um run (preenche e para). O que garante segurança antes de
+qualquer Finalizar é o filtro das PRONTAS:
 
 1. `revisao.md` lista todas as entradas suspeitas/inválidas com os motivos;
-2. no portal, o professor vê cada lição preenchida, ajusta o que quiser e clica em
-   **Finalizar** (irreversível, com aviso do próprio portal).
+2. entradas em `revisao.md` — o professor resolve no portal e finaliza; as PRONTAS o
+   programa preenche e finaliza sozinho.
+
+Notas: o Finalizar do portal finaliza com **um clique único** e um alerta de ~2 segundos
+("uma vez enviado não tem volta"), sem confirmação. Entradas que o programa mandou para
+`revisao.md` **jamais** são finalizadas por ele.
 
 Além disso, o botão **Resetar** do portal (que apaga a resposta do aluno) não é usado
 pelo programa.
@@ -189,8 +196,9 @@ máxima". Defesas implementadas (ver `lib/guard.js` e `tests/`):
   (triagem, nunca preenchimento).
 - **(f) Estatísticas locais** — médias e contagens de `report.json` são recalculadas pelo
   código; o relatório da IA (se houver) é salvo à parte em `relatorio-ia.md`, só consulta.
-- **(g) Finalizar é sempre humano** — o programa preenche e para; professor revisa no
-  portal e finaliza.
+- **(g) Finalizar é do programa no padrão** — após preencher, clica em Finalizar nas
+  PRONTAS (decisão explícita do professor, desativar com `--sem-finalizar`); entradas em
+  `revisao.md` nunca são finalizadas.
 - **(h) Lotes** — documentos pequenos reduzem o efeito de injeções no contexto.
 
 ## Privacidade do que vai para a IA
@@ -251,6 +259,14 @@ navegando, nada é fixo no código.
 
 ## Status (o que ainda não está pronto)
 
+- **Finalizar por padrão (2026-11-19)**: a pedido explícito do professor, o `apply` agora
+  FINALIZA sozinho as atividades PRONTAS (nunca as de `revisao.md`). O botão Finalizar do
+  portal é de clique único com alerta de ~2s, sem confirmação — verificado ao vivo.
+  `--sem-finalizar` desliga para um run.
+- **Incidente conhecido (2026-11-19)**: durante a demo de gravação do botão, o professor
+  clicou em Finalizar na atividade "Lesson 1 > Atividade 4 - Writing" (Unit 4, Lesson 367,
+  A000002) com conteúdo de teste — ficou gravada como Parcial com feedback "very good".
+  Irreversível. Essa atividade fica excluída das próximas coletas (consta CORRIGIDA).
 - **Auditoria de 2026-11 (T1–T10) aplicada**: parser orientado ao marcador (T1), corte do
   feedback (T2), tolerância a cerca de código (T3), INJECT oficial (T4), regras T5 em
   código, fail-safe antes de preencher (T6), relatório da IA em `relatorio-ia.md` (T7),
