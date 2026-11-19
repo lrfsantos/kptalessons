@@ -57,11 +57,14 @@ npm test             # testes do parser e da guarda (não acessam a rede)
 
 ## O botão do professor: duplo clique e roda
 
-- **`Corrigir.cmd`** (na pasta do projeto) — duplo clique e roda `npm run corrigir`
-- **"Corrigir atividades CNA"** (atalho na Área de Trabalho) — duplo clique idem
+**Tudo acontece dentro da pasta `cna-corretor/`** — o programa, o atalho e todos os
+arquivos do fluxo. Nada fica fora dela:
 
-O professor não precisa abrir terminal nem saber a pasta: duplo clique, janela abre, o
-programa coleta no portal, espera o passo da IA e aplica + finaliza as PRONTAS sozinho.
+- **`Corrigir.cmd`** — duplo clique e o programa roda
+- **`Corrigir atividades CNA.lnk`** — atalho (duplo clique, mesma coisa)
+
+O professor abre a pasta, dá duplo clique e o programa coleta no portal, espera o passo da
+IA e aplica + finaliza as PRONTAS sozinho — sem abrir terminal.
 
 ## Um comando só: `npm run corrigir`
 

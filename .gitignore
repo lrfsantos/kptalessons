@@ -28,3 +28,4 @@ all_answers.txt
 # Sistema
 .DS_Store
 Thumbs.db
+*.lnk
