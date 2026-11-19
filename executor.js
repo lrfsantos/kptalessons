@@ -2,11 +2,10 @@
 // CNA Corretor — EXECUTOR (aplica as correções da IA)
 //
 // Lê os lotes devolvidos pela IA (lotes/lote-NN.devolvido.md),
-// valida cada entrada (guard.js) e preenche classificação + feedback
-// no portal. PADRÃO (decisão do professor, 2026-11-19): após preencher,
-// o programa TAMBÉM clica em Finalizar (irreversível) — SOMENTE em
-// entradas PRONTAS; entradas em revisao.md nunca são preenchidas nem
-// finalizadas. Use --sem-finalizar para preencher e parar (padrão antigo).
+// valida cada entrada (guard.js), preenche classificação + feedback
+// no portal e FINALIZA cada atividade PRONTA (regra absoluta do produto).
+// Entradas em revisao.md nunca são preenchidas nem finalizadas.
+// appliedRefs só recebe refs com finalização CONFIRMADA no portal.
 //
 // Gera:
 //   report.json  -> resultado por atividade + estatísticas calculadas aqui
@@ -34,11 +33,10 @@ function findReturnedFiles() {
     .map(f => path.join(CFG.LOTES_DIR, f));
 }
 
-// Finalizar é o PADRÃO (decisão explícita do professor, 2026-11-19):
-// após PREENCHER, o programa clica em Finalizar na própria atividade —
-// IRREVERSÍVEL. SOMENTE as entradas PRONTAS (revisão nunca finaliza).
-// Válvulas: --sem-finalizar desliga só para um run (preenche e para).
-const FINALIZAR = !process.argv.includes('--sem-finalizar');
+// Finalização automática é a REGRA ABSOLUTA do produto (decisão do professor):
+// cada entrada PRONTA é preenchida, confirmada e FINALIZADA (irreversível).
+// Nenhuma opção desliga a finalização. Entradas em revisão nunca são tocadas.
+// appliedRefs SÓ recebe uma ref depois da confirmação de finalização no portal.
 
 // Índice answers.json por ref -> dados originais
 function indexOriginals(data) {
@@ -51,9 +49,7 @@ function indexOriginals(data) {
 
 (async () => {
   console.log('🚀 CNA Corretor — apply');
-  console.log(FINALIZAR
-    ? '⚠️  PADRÃO: preenche E FINALIZA as atividades PRONTAS no portal (ação irreversível).'
-    : 'ℹ️  --sem-finalizar: preenche, mas NÃO finaliza nenhuma atividade.');
+  console.log('⚠️  As atividades PRONTAS serão FINALIZADAS automaticamente (ação irreversível).');
 
   const files = findReturnedFiles();
   if (!files.length) {
@@ -177,16 +173,21 @@ function indexOriginals(data) {
           continue;
         }
 
+        // 3.2: se a atividade já estiver corrigida no portal, reconhecer como
+        // concluída e NÃO clicar em Finalizar de novo.
+        const jaCorrigida = await portal.isCorrected(page);
+        if (jaCorrigida) {
+          r.finalized = true;
+          filled.push(r);
+          console.log(`já estava CORRIGIDA no portal — registrada, sem novo clique`);
+          continue;
+        }
+
         const res = await portal.fillCorrection(page, r.classification, r.feedback);
         if (res.ok) {
-          if (FINALIZAR) {
-            const fin = await portal.finalize(page);
-            if (fin.ok) { r.finalized = true; filled.push(r); console.log(`PREENCHIDA + FINALIZADA (${r.classification}, score ${r.score})`); }
-            else { r.status = 'REVISAO'; r.reasons = [...(r.reasons || []), fin.error]; console.log(`PREENCHIDA, mas NÃO finalizou: ${fin.error}`); }
-          } else {
-            filled.push(r);
-            console.log(`preenchida (${r.classification}, score ${r.score}) — aguardando Finalizar do professor`);
-          }
+          const fin = await portal.finalize(page);
+          if (fin.ok) { r.finalized = true; filled.push(r); console.log(`${r.classification} — FINALIZADA`); }
+          else { r.status = 'REVISAO'; r.reasons = [...(r.reasons || []), fin.error]; console.log(`FALHA NA FINALIZAÇÃO: ${fin.error} — não registrada como concluída`); }
         }
         else { r.status = 'REVISAO'; r.reasons = [...(r.reasons || []), res.error]; console.log(`FALHOU: ${res.error}`); }
       } catch (err) {
@@ -199,12 +200,14 @@ function indexOriginals(data) {
   }
 
   // ---- Relatório (médias/contagens SEMPRE calculadas aqui) ------
-  const aplicadas = filled.filter(r => r.status === 'PRONTA');
-  // Registra o que já foi aplicado para um re-run não duplicar atividades.
+  // REGRA ABSOLUTA: só entra em appliedRefs quem teve a finalização CONFIRMADA
+  // (r.finalized). Nunca gravar refs de preenchidas-sem-finalizar.
+  const aplicadas = filled.filter(r => r.finalized && r.status === 'PRONTA');
   if (aplicadas.length) {
     data.appliedRefs = [...new Set([...applied, ...aplicadas.map(r => r.ref)])];
     fs.writeFileSync(CFG.ANSWERS_FILE, JSON.stringify(data, null, 2));
   }
+  const falhasFinalizacao = results.filter(r => /finalização|Finalizar|corrigida/i.test((r.reasons || []).join(' ')) && r.status === 'REVISAO').length;
   const stat = n => results.filter(r => r.status === 'PRONTA').length;
   const stats = {
     geradoEm: new Date().toISOString(),
@@ -212,11 +215,10 @@ function indexOriginals(data) {
     prontas: stat(),
     preenchidasNoPortal: aplicadas.length,
     jaAplicadasAntes: results.filter(r => r.status === 'JA_APLICADA').length,
-    finalizarAtivado: FINALIZAR,
-    finalizadasNoPortal: aplicadas.filter(r => r.finalized).length,
-    notaPedidoProfessor: FINALIZAR
-      ? 'Modo finalizar PADRÃO: por decisão explícita do professor (2026-11-19), após preencher o programa também clicou em Finalizar em cada atividade preenchida (irreversível). Entradas em revisao.md NÃO foram finalizadas.'
-      : 'Run com --sem-finalizar: o programa NÃO finalizou nada (preencheu e parou). O professor finalizará manualmente no portal.',
+    finalizarAtivado: true,
+    finalizadasNoPortal: aplicadas.length,
+    falhasFinalizacao,
+    notaPedidoProfessor: 'Finalização automática obrigatória (decisão do professor): só entram em appliedRefs as atividades com finalização CONFIRMADA no portal.',
     revisaoManual: results.filter(r => r.status === 'REVISAO').length,
     lotesNaoDevolvidos: inspected.missingBatches.map(n => String(n).padStart(2, '0')),
     jaCorrigidas: results.filter(r => /já está corrigida/.test((r.reasons || []).join(' '))).length,
@@ -230,10 +232,8 @@ function indexOriginals(data) {
   // ---- Tela de revisão --------
   const rev = results.filter(r => r.status === 'REVISAO');
   let revisao = '# Revisão manual necessária\n\n';
-  revisao += FINALIZAR
-    ? '_Neste run o programa finalizou as atividades PRONTAS (padrão por decisão do professor, 2026-11-19). As entradas abaixo NÃO foram preenchidas nem finalizadas — revise e finalize você mesmo(a)._\n\n'
-    : '_Run com --sem-finalizar: o programa NÃO finalizou atividades. Revise cada caso abaixo no portal e finalize você mesmo(a)._\n\n';
-  if (!rev.length) revisao += FINALIZAR ? '_Nenhuma revisão pendente. Todas as entradas válidas foram preenchidas e finalizadas._\n' : '_Nenhuma. Todas as entradas válidas foram preenchidas (não finalizadas)._\n';
+  revisao += '_O programa finaliza automaticamente as atividades PRONTAS. As entradas abaixo NÃO foram preenchidas nem finalizadas — exigem atenção manual._\n\n';
+  if (!rev.length) revisao += '_Nenhuma revisão pendente. Todas as entradas válidas foram preenchidas e finalizadas._\n';
   if (inspected.missingBatches.length)
     revisao += `- Lotes ainda não devolvidos nesta coleta: ${inspected.missingBatches.map(n => String(n).padStart(2, '0')).join(', ')}\n\n`;
   for (const r of rev) {
@@ -249,8 +249,9 @@ function indexOriginals(data) {
   console.log('='.repeat(48));
   console.log(`  Total de entradas        : ${stats.totalEntradas}`);
   console.log(`  Preenchidas no portal    : ${stats.preenchidasNoPortal}`);
-  if (FINALIZAR) console.log(`  FINALIZADAS pelo programa: ${stats.finalizadasNoPortal} (padrão por decisão do professor)`);
+  console.log(`  FINALIZADAS pelo programa: ${stats.finalizadasNoPortal}`);
   console.log(`  Em revisão manual        : ${stats.revisaoManual}`);
+  if (stats.falhasFinalizacao) console.log(`  Falhas de finalização    : ${stats.falhasFinalizacao} (NÃO registradas como concluídas)`);
   if (stats.jaAplicadasAntes) console.log(`  Já aplicadas (ignoradas) : ${stats.jaAplicadasAntes}`);
   if (stats.lotesNaoDevolvidos.length) console.log(`  Lotes não devolvidos     : ${stats.lotesNaoDevolvidos.join(', ')}`);
   console.log(`  Média de score           : ${stats.mediaScore ?? '—'}`);
@@ -260,11 +261,7 @@ function indexOriginals(data) {
   if (stats.incoerentes) console.log(`  Incoerências detectadas : ${stats.incoerentes}`);
 
   console.log('💾 report.json e revisao.md gerados.');
-  if (FINALIZAR) {
-    console.log('👉 Padrão: o programa finalizou as atividades PRONTAS no portal (decisão do professor).');
-    console.log('   Entradas em revisao.md não foram preenchidas/finalizadas — revise você mesmo(a).');
-  } else {
-    console.log('👉 Run com --sem-finalizar: o programa preencheu, mas NÃO finalizou.');
-    console.log('   Abra o portal e clique em Finalizar em cada uma. Reveja revisao.md antes.');
-  }
+  console.log('👉 Finalização automática: as PRONTAS foram finalizadas no portal.');
+  console.log('   Entradas em revisao.md ou com falha de finalização NÃO foram registradas como concluídas —');
+  console.log('   a coleta e os lotes foram preservados para nova tentativa.');
 })().catch(e => { console.error('💥 Erro:', e.message); process.exit(1); });

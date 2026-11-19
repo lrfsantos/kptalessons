@@ -116,6 +116,7 @@ const loteSize = parseInt(arg('lote', String(CFG.LOTE_SIZE || 10)), 10) || 10;
     const pendentes = classes.reduce((a, c) => a + c.students.reduce((b, s) => b + s.lessons.filter(l => l.pending).length, 0), 0);
     if (!pendentes) {
       console.log('\n✅ Nenhuma pendência capturada. Nada a exportar.');
+      console.log('   Se uma coleta anterior estava incompleta, seus lotes foram preservados.');
       return;
     }
 

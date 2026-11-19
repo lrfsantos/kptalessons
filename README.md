@@ -1,9 +1,28 @@
-# CNA Corretor
+# Corretor CNA
 
-Ferramenta para professores do CNA automatizarem a correção de **atividades escritas**
-no portal do professor (app.cna.com.br), com correção feita por uma IA **que o próprio
-professor escolhe** (Gemini/ChatGPT gratuitos, por exemplo) — o programa não usa API,
-não chama IA e não precisa de chave.
+Ferramenta **gratuita** para professores do CNA corrigirem atividades escritas do portal
+(app.cna.com.br).Você escolhe a IA (Gemini, ChatGPT ou outra) — o programa não tem API própria,
+não cobra nada e não envia dados para nenhum serviço pago.
+
+## Como usar (primeira página)
+
+1. **Abra a pasta** `Corretor CNA` e dê **dois cliques** em `Corrigir.cmd`. Não precisa
+   instalar nada: Node.js, Playwright e o navegador já vêm dentro da pasta.
+2. **Primeira vez:** o programa abre um navegador. Faça login com a **sua conta CNA**.
+   Sua senha não é guardada; só a sessão fica salva no seu computador.
+3. O programa **coleta as atividades pendentes** e cria os arquivos na pasta `lotes/`.
+4. **Envie cada arquivo Markdown para a IA** que você preferir e salve o retorno na pasta
+   `lotes/` com o nome indicado na tela (por exemplo `lote-01.devolvido.md`).
+5. **Não precisa fazer mais nada:** o programa detecta os arquivos sozinho, confere se estão
+   corretos e, quando todos chegarem, preenche e **FINALIZA automaticamente** cada atividade
+   aprovada no portal.
+6. Atividades suspeitas ou inválidas **não são finalizadas**: ficam explicadas em `revisao.md`
+   para você decidir com calma.
+
+Cada professor deve usar a **sua própria cópia da pasta** e a **sua própria conta CNA**. As
+respostas são mascaradas antes de irem para a IA (e-mails, telefones e nomes viram marcadores
+como `[EMAIL]`). O programa não promete corrigir tudo automaticamente: o que não passa nas
+verificações continua exigindo atenção.
 
 ```
 ┌─────────────┐   1. scrape    ┌──────────────┐   2. professor cola    ┌──────────────┐
@@ -38,8 +57,8 @@ não chama IA e não precisa de chave.
 4. **Aplicação** — `npm run apply`. O programa:
    - valida **cada entrada** (ver "Validação" abaixo);
    - abre a lição no portal, marca a classificação e digita o feedback;
-   - **clica em Finalizar** nas PRONTAS — decisão explícita do professor (2026-11-19); entradas em revisao.md nunca são preenchidas nem finalizadas;
-   - --sem-finalizar desliga o Finalizar para um run (preenche e para);
+   - **clica em Finalizar** nas PRONTAS (regra absoluta do produto); entradas em revisao.md nunca são preenchidas nem finalizadas;
+   - só registra como concluída no `appliedRefs` a atividade cuja finalização foi confirmada no portal;
    - gera `report.json` (estatísticas) e `revisao.md` (o que precisa de atenção humana).
 
 ## Como rodar
@@ -73,11 +92,12 @@ e o runtime Node embutido (`runtime/`). O professor não instala **nada** — s�
 dá duplo clique em **`Corrigir.cmd`**:
 
 1. Copie a pasta `corretor cna` para o computador do professor (pen drive, rede, nuvem)
-2. Abra a pasta → duplo clique em **`Corrigir.cmd`** — ele detecta tudo que precisa; se a
-   máquina já tiver Node, usa o dela; se não, usa o embutido
+2. Abra a pasta → duplo clique em **`Corrigir.cmd`** — ele usa o Node e o navegador que vêm
+   dentro da própria pasta (nada é instalado no computador)
 3. Primeira vez lá: ele abre o login do portal — o professor digita a **própria conta dele**
    e a sessão fica salva só naquele PC
-4. O fluxo roda sozinho: coleta → ele cola na IA → aperta ENTER → programa aplica e finaliza
+4. O programa coleta, **monitora a pasta sozinho** (sem apertar ENTER) e, quando todos os
+   lotes devolvidos estiverem válidos, aplica e finaliza automaticamente
 
 Único requisito: Microsoft Edge (ou Chrome) — já vem com o Windows.
 
@@ -97,8 +117,8 @@ npm run corrigir
 1. **Coleta no portal** — o programa abre o site, coleta as respostas e gera `lotes/lote-NN.md`
 2. **Você na IA (manual, por design — sem chave de API)** — cole cada lote na sua IA e salve
    o retorno como `lotes/lote-NN.devolvido.md`
-3. **Aplica e finaliza** — quando você apertar ENTER, o programa valida e **preenche + finaliza**
-   cada lição PRONTA. Entradas incertas ficam em `revisao.md` (não são preenchidas/finalizadas).
+3. **Monitora a pasta automaticamente** (sem ENTER) até todos os lotes válidos chegarem;
+   o programa aplica e **finaliza** cada uma das PRONTAS
 
 Variáveis opcionais (`.env.example`): `HEADLESS`, `LOTE_SIZE`, `NAV_TIMEOUT` —
 use com `node --env-file=.env scraper.js`.
@@ -204,12 +224,10 @@ arquivo `historico-<data>.md` na pasta `lotes/` (com os nomes originais), fora d
 
 ### Alguma nota pode ser lançada sem o professor revisar? Como funciona a etapa antes do Finalizar?
 
-**Sim — decisão explícita do professor (2026-11-19): o programa Finaliza sozinho.** Após
-preencher, o programa clica em Finalizar nas atividades PRONTAS — **nunca** nas de
-`revisao.md` (entradas incertas ficam para revisão humana). A decisão do professor foi
-tomada justamente para o professor não precisar estar lá. `npm run apply -- --sem-finalizar`
-desativa o Finalizar para um run (preenche e para). O que garante segurança antes de
-qualquer Finalizar é o filtro das PRONTAS:
+**Sim — regra absoluta do produto: o programa Finaliza sozinho.** Após preencher, o programa
+clica em Finalizar nas atividades PRONTAS — **nunca** nas de `revisao.md` (entradas incertas
+ficam para revisão humana). Não existe opção para desligar a finalização: o que garante
+segurança antes de qualquer Finalizar é o filtro das PRONTAS:
 
 1. `revisao.md` lista todas as entradas suspeitas/inválidas com os motivos;
 2. entradas em `revisao.md` — o professor resolve no portal e finaliza; as PRONTAS o
@@ -254,8 +272,8 @@ máxima". Defesas implementadas (ver `lib/guard.js` e `tests/`):
   (triagem, nunca preenchimento).
 - **(f) Estatísticas locais** — médias e contagens de `report.json` são recalculadas pelo
   código; o relatório da IA (se houver) é salvo à parte em `relatorio-ia.md`, só consulta.
-- **(g) Finalizar é do programa no padrão** — após preencher, clica em Finalizar nas
-  PRONTAS (decisão explícita do professor, desativar com `--sem-finalizar`); entradas em
+- **(g) Finalização automática obrigatória** — após preencher e confirmar os campos, clica em
+  Finalizar nas PRONTAS; só registra `appliedRefs` após confirmação no portal. Entradas em
   `revisao.md` nunca são finalizadas.
 - **(h) Lotes** — documentos pequenos reduzem o efeito de injeções no contexto.
 
@@ -317,10 +335,9 @@ navegando, nada é fixo no código.
 
 ## Status (o que ainda não está pronto)
 
-- **Finalizar por padrão (2026-11-19)**: a pedido explícito do professor, o `apply` agora
-  FINALIZA sozinho as atividades PRONTAS (nunca as de `revisao.md`). O botão Finalizar do
-  portal é de clique único com alerta de ~2s, sem confirmação — verificado ao vivo.
-  `--sem-finalizar` desliga para um run.
+- **Finalização automática obrigatória**: o `apply` FINALIZA sozinho as atividades PRONTAS
+  (nunca as de `revisao.md`) e só registra `appliedRefs` após confirmação no portal. O botão
+  Finalizar é clique único com alerta de ~2s, sem confirmação — verificado ao vivo.
 - **Incidente conhecido (2026-11-19)**: durante a demo de gravação do botão, o professor
   clicou em Finalizar na atividade "Lesson 1 > Atividade 4 - Writing" (Unit 4, Lesson 367,
   A000002) com conteúdo de teste — ficou gravada como Parcial com feedback "very good".
