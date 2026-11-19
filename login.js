@@ -42,6 +42,5 @@ const CFG = require('./lib/config');
   await session.saveState(context); // somente em %TEMP%, removido no fim da execução
   console.log('💾 Sessão desta execução pronta (temporária).\n');
 
-  // Não fechamos o navegador aqui: o scrapings roda logo em seguida e
-  // precisa da mesma autenticação. O wizard encerra tudo no finally.
+  await browser.close();
 })().catch(e => { console.error('💥 Erro:', e.message); process.exit(1); });

@@ -103,7 +103,10 @@ test('14: nenhuma senha ou credencial é armazenada', () => {
   assert.match(login, /portal\.isAuthenticated/);
 });
 
-test('15: limpeza no finally cobre erro e encerramento normal', () => {
+test('16: login fecha o navegador após guardar o estado temporário', () => {
+  const login = ler('../login');
+  assert.match(login, /await session\.saveState\(context\)[\s\S]*await browser\.close\(\)/);
+});
   const wizard = ler('../corrigir');
   assert.match(wizard, /\}\s*finally\s*\{[\s\S]*session\.cleanup\(\)/);
   assert.match(wizard, /\.catch\(e => \{[\s\S]*session\.cleanup\(\)/);
