@@ -109,7 +109,7 @@ test('painel: retorno com nonce incorreto não é salvo', async () => {
   try {
     const response = await fetch(panel.url.replace(/\/$/, '/api/submit'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: doc(ref1, 'I went home.').replace(nonce, '999999999999') }),
+      body: JSON.stringify({ text: doc(ref1, 'I went home.').replaceAll(nonce, '999999999999') }),
     });
     assert.equal(response.status, 422);
     assert.equal(fs.existsSync(path.join(returns, 'lote-01.md')), false);
