@@ -13,7 +13,7 @@
 // "em branco" e entra normalmente.
 //
 // Uso:
-//   npm run scrape            (lotes de 8 atividades)
+//   npm run scrape            (até 10 atividades por lote)
 //   npm run scrape -- --lote 5 --all
 // Requer: login manual nesta execução (o wizard faz antes de coletar).
 // ============================================================
@@ -32,11 +32,30 @@ function arg(name, def) {
 const onlyPending = !process.argv.includes('--all');
 const loteSize = parseInt(arg('lote', String(CFG.LOTE_SIZE || 10)), 10) || 10;
 
+function archivePreviousRun() {
+  fs.mkdirSync(CFG.LOTES_DIR, { recursive: true });
+  const stamp = Date.now();
+  const historyDir = path.join(CFG.LOTES_DIR, 'historico-run-' + stamp);
+  const dataFiles = [
+    CFG.ANSWERS_FILE, CFG.REPORT_FILE, CFG.REVISAO_FILE,
+    CFG.RELATORIO_IA_FILE, CFG.RESUMO_FILE, CFG.ALL_ANSWERS_FILE,
+  ].filter(file => fs.existsSync(file));
+  if (dataFiles.length) {
+    fs.mkdirSync(historyDir, { recursive: true });
+    for (const file of dataFiles) {
+      const destination = path.join(historyDir, path.basename(file));
+      fs.renameSync(file, destination);
+    }
+  }
+  md.archivePrevious(CFG.LOTES_DIR);
+}
+
 (async () => {
   console.log('🚀 CNA Corretor — scrape (coleta de atividades escritas)');
 
-  // A autenticação vem da sessão TEMPORÁRIA desta execução (criada pelo login).
-  // Não existe mais session.json: o wizard sempre faz login antes de coletar.
+  // Cada login pertence a uma única execução/professor. Arquive tudo da execução anterior
+  // antes de coletar, evitando que answers.json ou lotes de outra conta sejam reutilizados.
+  archivePreviousRun();
   const { browser, page } = await launch({ headless: CFG.HEADLESS === true });
   const classes = [];
   const captureFailures = []; // { ref, turma, aluno, title }
@@ -112,8 +131,9 @@ const loteSize = parseInt(arg('lote', String(CFG.LOTE_SIZE || 10)), 10) || 10;
 
     const pendentes = classes.reduce((a, c) => a + c.students.reduce((b, s) => b + s.lessons.filter(l => l.pending).length, 0), 0);
     if (!pendentes) {
+      const generatedAt = new Date().toISOString();
+      fs.writeFileSync(CFG.ANSWERS_FILE, JSON.stringify({ generatedAt, collection: null, captureFailures, classes, appliedRefs: [] }, null, 2));
       console.log('\n✅ Nenhuma pendência capturada. Nada a exportar.');
-      console.log('   Se uma coleta anterior estava incompleta, seus lotes foram preservados.');
       return;
     }
 
@@ -136,9 +156,9 @@ const loteSize = parseInt(arg('lote', String(CFG.LOTE_SIZE || 10)), 10) || 10;
       console.log('   Depois de corrigir o problema, rode o scrape de novo.');
     }
     console.log('\n👉 Próximos passos:');
-    console.log('   1. Abra os arquivos de lotes/, cole o conteúdo na sua IA e devolva');
-    console.log('      cada um como lote-NN.devolvido.md na mesma pasta.');
-    console.log('   2. Rode:  npm run apply');
+    console.log('   No fluxo completo (npm run corrigir), o Painel Local abre automaticamente.');
+    console.log('   Copie um lote ou todos, envie à IA e cole o retorno no painel.');
+    console.log('   Não é necessário criar, salvar ou renomear arquivos devolvidos.');
   } finally {
     await browser.close();
   }

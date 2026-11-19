@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corretor CNA — Painel de Correção</title>
+<style>
+:root{color-scheme:light;--ink:#17212b;--muted:#66717d;--line:#dce2e8;--bg:#f4f6f8;--card:#fff;--accent:#115e59;--accent-light:#e5f2f0;--good:#176b46;--good-bg:#e7f5ec;--warn:#8a5a08;--warn-bg:#fff4d8;--bad:#a12c2c;--bad-bg:#fdecec}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Segoe UI",Arial,sans-serif}
+main{max-width:980px;margin:0 auto;padding:28px 20px 48px}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:25px}
+.brand{font-weight:700;font-size:17px;letter-spacing:.01em}.eyebrow{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.1em}
+h1{font-size:28px;line-height:1.2;margin:6px 0 8px}h2{font-size:18px;margin:0 0 8px}
+p{margin:0 0 12px}.muted{color:var(--muted)}.intro{max-width:700px}
+.summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:22px 0}
+.metric,.card,.panel{background:var(--card);border:1px solid var(--line);border-radius:12px}
+.metric{padding:15px 17px}.metric strong{display:block;font-size:25px;line-height:1.2}.metric span{font-size:12px;color:var(--muted)}
+.progress{height:8px;background:#e7ebef;border-radius:999px;overflow:hidden;margin-top:10px}.progress>span{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.section-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:26px 0 12px}
+.batch-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.card{padding:15px}.batch-head{display:flex;justify-content:space-between;align-items:start;gap:10px}
+.batch-title{font-weight:700}.batch-count{font-size:13px;color:var(--muted)}
+.status{font-size:12px;border-radius:999px;padding:4px 9px;background:#edf0f3;color:#53606c;white-space:nowrap}
+.status.received{background:var(--good-bg);color:var(--good)}
+button,.file-button{border:1px solid var(--line);border-radius:8px;background:white;color:var(--ink);padding:10px 13px;font:600 14px "Segoe UI",Arial,sans-serif;cursor:pointer}
+button:hover,.file-button:hover{border-color:#98aaa9;background:#f8fbfa}button.primary{background:var(--accent);color:white;border-color:var(--accent)}button.primary:hover{background:#0e514d}button:disabled{opacity:.45;cursor:not-allowed}
+.batch-actions{margin-top:12px;display:flex;justify-content:flex-end}
+.panel{padding:19px;margin-top:16px}.panel p{max-width:760px}.toolbar{display:flex;gap:9px;flex-wrap:wrap;margin:14px 0}
+textarea{width:100%;min-height:220px;resize:vertical;border:1px solid #cbd3da;border-radius:9px;padding:13px;font:13px/1.5 Consolas,"Courier New",monospace;color:var(--ink);background:#fff}
+textarea:focus{outline:2px solid #8cc2bc;outline-offset:1px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px}
+.notice{border-radius:9px;padding:12px 14px;background:var(--accent-light);color:#174e4a;margin:14px 0}
+.notice.good{background:var(--good-bg);color:var(--good)}.notice.warn{background:var(--warn-bg);color:var(--warn)}.notice.bad{background:var(--bad-bg);color:var(--bad)}
+.small{font-size:12px}.hidden{display:none}
+footer{margin-top:22px;color:var(--muted);font-size:12px}
+@media(max-width:650px){main{padding:20px 13px 36px}.batch-list{grid-template-columns:1fr}.summary{gap:8px}.metric{padding:12px}.metric strong{font-size:21px}h1{font-size:24px}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div><div class="brand">CORRETOR CNA</div><div class="eyebrow">Painel local de correção</div></div>
+  <div class="status" id="phase">Aguardando IA</div>
+</header>
+
+<div class="intro">
+  <h1>Correção com sua IA</h1>
+  <p class="muted">Copie o conteúdo de um lote, envie para a IA que preferir e cole a resposta aqui. O programa identifica as atividades pelas referências — você não precisa salvar, separar ou renomear arquivos.</p>
+</div>
+
+<div class="summary">
+  <div class="metric"><strong id="total">—</strong><span>Atividades encontradas</span></div>
+  <div class="metric"><strong id="received">—</strong><span>Atividades recebidas e validadas</span></div>
+  <div class="metric"><strong id="batchProgress">—</strong><span>Lotes recebidos</span><div class="progress"><span id="progressBar"></span></div></div>
+</div>
+
+<div class="section-title">
+  <h2>1. Envie os lotes para sua IA</h2>
+  <button id="copyAll">Copiar todos os lotes</button>
+</div>
+<p class="muted small">Você pode enviar um lote por vez ou todos juntos, caso sua IA aceite o volume. Para modelos gratuitos, recomendamos começar um lote por vez.</p>
+<div class="batch-list" id="batches"></div>
+
+<section class="panel">
+  <h2>2. Cole o retorno da IA</h2>
+  <p class="muted">Cole a resposta completa da IA abaixo. Pode ser um lote ou vários lotes no mesmo documento. O programa separa as atividades e valida nonce, referências, duplicações e campos obrigatórios.</p>
+  <textarea id="answer" spellcheck="false" placeholder="Cole aqui a resposta da IA..."></textarea>
+  <div class="toolbar">
+    <label class="file-button" for="fileInput">Importar arquivo .md (opcional)</label>
+    <input id="fileInput" class="hidden" type="file" accept=".md,.markdown,.txt,text/plain,text/markdown">
+    <button id="clear">Limpar campo</button>
+  </div>
+  <div class="row">
+    <span class="muted small" id="charCount">0 caracteres</span>
+    <button class="primary" id="submit">Validar e receber retorno</button>
+  </div>
+  <div id="result" class="notice hidden" role="status" aria-live="polite"></div>
+</section>
+
+<div id="complete" class="notice good hidden">
+  <strong>Todos os retornos foram recebidos.</strong>
+  <div>O programa vai iniciar a validação final e aplicar as correções aprovadas no portal CNA.</div>
+</div>
+
+<footer>Este painel funciona somente neste computador. O programa não envia atividades para a IA: você escolhe o serviço e faz a transferência manualmente. Os retornos são armazenados localmente para a etapa de validação e aplicação.</footer>
+</main>
+
+<script>
+const base = location.pathname.replace(/\/$/, '');
+const $ = id => document.getElementById(id);
+let lastState = null;
+
+async function api(path, options) {
+  const response = await fetch(base + path, options || {});
+  const data = await response.json();
+  if (!response.ok) {
+    const details = (data.globalIssues || []).join('\n');
+    throw new Error([data.error || 'Falha na comunicação com o painel.', details].filter(Boolean).join('\n'));
+  }
+  return data;
+}
+function notice(message, type) {
+  const el = $('result');
+  el.textContent = message;
+  el.className = 'notice ' + (type || '');
+  el.classList.remove('hidden');
+}
+function escapeText(v) { return String(v == null ? '' : v); }
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    notice('Conteúdo copiado. Agora cole na IA de sua preferência.', 'good');
+  } catch (err) {
+    const fallback = document.createElement('textarea');
+    fallback.value = text;
+    document.body.appendChild(fallback);
+    fallback.select();
+    const ok = document.execCommand('copy');
+    fallback.remove();
+    if (!ok) throw new Error('Não foi possível copiar automaticamente. Selecione o texto e copie manualmente.');
+    notice('Conteúdo copiado. Agora cole na IA de sua preferência.', 'good');
+  }
+}
+async function copyBatch(num) {
+  const data = await api('/api/batch/' + num);
+  await copyText(data.content);
+}
+async function refresh() {
+  try {
+    const state = await api('/api/state');
+    lastState = state;
+    $('total').textContent = state.totalActivities;
+    $('received').textContent = state.receivedActivities;
+    $('batchProgress').textContent = state.receivedBatches + ' / ' + state.batchCount;
+    $('progressBar').style.width = (state.batchCount ? (100 * state.receivedBatches / state.batchCount) : 0) + '%';
+    const phaseNames = {waiting:'Aguardando retornos',applying:'Aplicando no portal',done:'Processamento concluído',error:'Houve um problema'};
+    $('phase').textContent = phaseNames[state.phase] || 'Aguardando IA';
+    $('batches').replaceChildren();
+    state.batches.forEach(batch => {
+      const card = document.createElement('article');
+      card.className = 'card';
+      const head = document.createElement('div');
+      head.className = 'batch-head';
+      const left = document.createElement('div');
+      const title = document.createElement('div');
+      title.className = 'batch-title';
+      title.textContent = 'Lote ' + String(batch.num).padStart(2,'0');
+      const count = document.createElement('div');
+      count.className = 'batch-count';
+      count.textContent = batch.total + ' atividades';
+      left.append(title,count);
+      const badge = document.createElement('span');
+      badge.className = 'status' + (batch.received ? ' received' : '');
+      badge.textContent = batch.received ? 'Recebido e validado' : 'Aguardando retorno';
+      head.append(left,badge);
+      const actions = document.createElement('div');
+      actions.className = 'batch-actions';
+      const copy = document.createElement('button');
+      copy.textContent = batch.received ? 'Recebido' : 'Copiar lote';
+      copy.disabled = batch.received;
+      copy.addEventListener('click', () => copyBatch(batch.num).catch(e => notice(e.message,'bad')));
+      actions.append(copy);
+      card.append(head,actions);
+      $('batches').append(card);
+    });
+    $('copyAll').disabled = state.done || state.batches.every(b => b.received);
+    if (state.done) $('complete').classList.remove('hidden');
+    if (state.phase === 'applying') notice('Todos os lotes foram validados. Aplicando as correções no portal...', 'good');
+    if (state.phase === 'done') notice('Processamento concluído. Consulte o relatório e a revisão gerados pelo programa.', 'good');
+    if (state.phase === 'error') notice('O processamento encontrou um problema. Consulte as mensagens do programa e o arquivo revisao.md.', 'bad');
+  } catch (e) {
+    notice(e.message,'bad');
+  }
+}
+$('copyAll').addEventListener('click', async () => {
+  try {
+    const pending = (lastState && lastState.batches ? lastState.batches : []).filter(b => !b.received);
+    if (!pending.length) return;
+    const docs = await Promise.all(pending.map(b => api('/api/batch/' + b.num)));
+    await copyText(docs.map(d => d.content).join('\n\n---\n\n'));
+  } catch (e) { notice(e.message,'bad'); }
+});
+$('submit').addEventListener('click', async () => {
+  const text = $('answer').value;
+  if (!text.trim()) { notice('Cole primeiro a resposta da IA.','warn'); return; }
+  $('submit').disabled = true;
+  $('submit').textContent = 'Validando...';
+  try {
+    const data = await api('/api/submit', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text})
+    });
+    const accepted = (data.accepted || []).map(b => 'Lote ' + String(b.num).padStart(2,'0') + ' (' + b.activities + ' atividades)');
+    const rejected = (data.rejectedBatches || []).map(b => 'Lote ' + String(b.num).padStart(2,'0') + ': ' + b.reasons.join('; '));
+    const parts = [];
+    if (accepted.length) parts.push('Recebido: ' + accepted.join(', ') + '.');
+    if (rejected.length) parts.push('Não aceito: ' + rejected.join(' | '));
+    if (!accepted.length && !rejected.length) parts.push('Nenhum lote novo foi recebido. Verifique se esse retorno já foi enviado.');
+    notice(parts.join(' '), accepted.length ? 'good' : 'warn');
+    await refresh();
+  } catch (e) {
+    notice(e.message,'bad');
+  } finally {
+    $('submit').disabled = false;
+    $('submit').textContent = 'Validar e receber retorno';
+  }
+});
+$('clear').addEventListener('click', () => { $('answer').value = ''; $('charCount').textContent = '0 caracteres'; });
+$('answer').addEventListener('input', () => { $('charCount').textContent = $('answer').value.length.toLocaleString('pt-BR') + ' caracteres'; });
+$('fileInput').addEventListener('change', async ev => {
+  const file = ev.target.files && ev.target.files[0];
+  if (!file) return;
+  $('answer').value = await file.text();
+  $('charCount').textContent = $('answer').value.length.toLocaleString('pt-BR') + ' caracteres';
+  notice('Arquivo carregado no campo. Clique em “Validar e receber retorno”.','good');
+  ev.target.value = '';
+});
+refresh();
+setInterval(refresh, 2500);
+</script>
+</body>
+</html>

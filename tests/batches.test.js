@@ -82,8 +82,8 @@ test('arquivamento preserva nomes originais e tira os arquivos da pasta ativa', 
   const archive = md.archivePrevious(dir);
   assert.ok(archive && fs.existsSync(archive));
   const content = fs.readFileSync(archive, 'utf8');
-  assert.ok(content.includes('Arquivo original: lote-01.md'));
-  assert.ok(content.includes('Arquivo original: lote-01.devolvido.md'));
+  assert.ok(content.includes('## Arquivo: lote-01.md'));
+  assert.ok(content.includes('## Arquivo: lote-01.devolvido.md'));
   assert.deepEqual(fs.readdirSync(dir).filter(f => f.endsWith('.devolvido.md')), []);
   assert.deepEqual(fs.readdirSync(dir).filter(f => /^lote-\d+\.md$/.test(f)), []);
 });

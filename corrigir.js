@@ -1,20 +1,17 @@
 // ============================================================
-// CNA Corretor — CORREÇÃO COMPLETA (um clique, sem comandos)
-//
-// Toda execução: contexto NOVO -> login manual -> coleta -> monitora
-// lotes -> aplica e finaliza as PRONTAS. Nenhuma sessão persiste.
-// A sessão temporária em %TEMP% é removida no finally (até em erro).
+// CNA Corretor — fluxo completo com Painel Local de Correção.
+// Login novo -> coleta -> copiar/colar com a IA -> aplicar e finalizar.
+// Nenhuma sessão persiste entre execuções.
 // ============================================================
-const { spawnSync } = require('child_process');
+const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const CFG = require('./lib/config');
-const md = require('./lib/md');
 const session = require('./lib/session');
+const { createPanel } = require('./lib/panel');
+const { launch } = require('./lib/browser');
 
-const POLL_MS = 1500;
-const STABLE_CHECKS = 2;
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function refsFinalizadas(filled, jaAplicadas = []) {
   return [...new Set([...jaAplicadas, ...filled.filter(r => r.finalized && r.status === 'PRONTA').map(r => r.ref)])];
@@ -25,28 +22,63 @@ function snapshotArquivos(dir, names) {
   for (const name of names) {
     try {
       const st = fs.statSync(path.join(dir, name));
-      out.set(name, `${st.size}:${st.mtimeMs}`);
-    } catch { /* sumiu */ }
+      out.set(name, st.size + ':' + st.mtimeMs);
+    } catch { /* arquivo ausente */ }
   }
   return out;
 }
 
 function run(script) {
-  const r = spawnSync(process.execPath, [script], { stdio: 'inherit', cwd: CFG.ROOT });
-  return r.status === 0;
+  return new Promise(resolve => {
+    const child = spawn(process.execPath, [script], {
+      stdio: 'inherit',
+      cwd: CFG.ROOT,
+      env: process.env,
+    });
+    child.once('error', error => {
+      console.error('Não foi possível iniciar ' + script + ': ' + error.message);
+      resolve(false);
+    });
+    child.once('close', code => resolve(code === 0));
+  });
 }
 
 function readAnswers() {
-  try { return JSON.parse(fs.readFileSync(CFG.ANSWERS_FILE, 'utf8')); } catch { return null; }
+  try { return JSON.parse(fs.readFileSync(CFG.ANSWERS_FILE, 'utf8')); }
+  catch { return null; }
+}
+
+function collectionReturnsDir() {
+  return CFG.RETURNS_DIR || path.join(CFG.LOTES_DIR, 'retornos-da-IA');
 }
 
 function coletaIncompleta(data) {
-  if (!data || !data.collection || !data.collection.batches) return false;
-  const dir = CFG.LOTES_DIR;
-  if (!fs.existsSync(dir)) return true;
-  const faltam = data.collection.batches.some(b =>
-    !fs.existsSync(path.join(dir, `lote-${String(b.num).padStart(2, '0')}.devolvido.md`)));
-  return faltam && fs.readdirSync(dir).some(f => /^lote-\d+\.md$/.test(f));
+  if (!data || !data.collection || !Array.isArray(data.collection.batches)) return false;
+  const returnsDir = collectionReturnsDir();
+  const missing = data.collection.batches.some(batch => {
+    const num = String(batch.num).padStart(2, '0');
+    return !fs.existsSync(path.join(returnsDir, 'lote-' + num + '.md')) &&
+      !fs.existsSync(path.join(CFG.LOTES_DIR, 'lote-' + num + '.devolvido.md'));
+  });
+  const hasOriginals = fs.existsSync(CFG.LOTES_DIR) &&
+    fs.readdirSync(CFG.LOTES_DIR).some(name => /^lote-\d{2,}\.md$/i.test(name));
+  return missing && hasOriginals;
+}
+
+function migrateLegacyReturns(collection) {
+  const returnsDir = collectionReturnsDir();
+  fs.mkdirSync(returnsDir, { recursive: true });
+  let moved = 0;
+  for (const batch of collection.batches || []) {
+    const num = String(batch.num).padStart(2, '0');
+    const oldFile = path.join(CFG.LOTES_DIR, 'lote-' + num + '.devolvido.md');
+    const newFile = path.join(returnsDir, 'lote-' + num + '.md');
+    if (fs.existsSync(oldFile) && !fs.existsSync(newFile)) {
+      fs.renameSync(oldFile, newFile);
+      moved++;
+    }
+  }
+  return moved;
 }
 
 const stableTracker = {
@@ -57,113 +89,97 @@ const stableTracker = {
       const prev = this.state.get(name);
       const count = prev && prev.key === key ? prev.count + 1 : 1;
       this.state.set(name, { key, count });
-      if (count >= STABLE_CHECKS) out.push(name);
+      if (count >= 2) out.push(name);
     }
     for (const name of [...this.state.keys()]) if (!snapshot.has(name)) this.state.delete(name);
     return out;
   },
 };
 
-function arquivosEstaveis() {
-  if (!fs.existsSync(CFG.LOTES_DIR)) return [];
-  const names = fs.readdirSync(CFG.LOTES_DIR).filter(f => md.RETURNED_NAME.test(f));
-  return stableTracker.update(snapshotArquivos(CFG.LOTES_DIR, names));
+async function runPanel(collection) {
+  const panel = await createPanel({
+    collection,
+    lotesDir: CFG.LOTES_DIR,
+    returnsDir: collectionReturnsDir(),
+  });
+  let panelBrowser = null;
+  try {
+    const opened = await launch({ fresh: true, headless: false });
+    panelBrowser = opened.browser;
+    panelBrowser.on('disconnected', () => {
+      if (!panel.getState().done) panel.abort('A janela do Painel Local foi fechada antes de todos os retornos serem recebidos.');
+    });
+    await opened.page.goto(panel.url, { waitUntil: 'domcontentloaded', timeout: CFG.NAV_TIMEOUT });
+    console.log('\nPainel local aberto no Chromium.');
+    console.log('Copie um lote ou todos, envie à IA e cole a resposta no painel.');
+    console.log('O retorno pode conter um ou vários lotes. Não é necessário salvar ou renomear arquivos.\n');
+
+    await panel.waitForComplete();
+    panel.setPhase('applying');
+    console.log('\nTodos os retornos foram recebidos e validados estruturalmente.');
+    console.log('Iniciando aplicação no portal CNA...\n');
+
+    const ok = await run('executor.js');
+    panel.setPhase(ok ? 'done' : 'error');
+    if (!ok) process.exitCode = 1;
+    await sleep(4500);
+    return ok;
+  } finally {
+    if (panelBrowser) {
+      try { await panelBrowser.close(); } catch { /* navegador já encerrado */ }
+    }
+    await panel.close();
+  }
 }
 
-function validados(collection) {
-  const nomes = arquivosEstaveis();
-  const files = nomes.map(name => ({ name, text: fs.readFileSync(path.join(CFG.LOTES_DIR, name), 'utf8') }));
-  const result = md.inspectReturnedBatches(files, collection);
-  return {
-    bons: result.files.filter(f => f.usable),
-    ruins: result.files.filter(f => !f.usable),
-    estaveis: nomes.length,
-  };
-}
-
-module.exports = { refsFinalizadas, snapshotArquivos, stableTracker, coletaIncompleta };
+module.exports = {
+  refsFinalizadas,
+  snapshotArquivos,
+  stableTracker,
+  coletaIncompleta,
+  migrateLegacyReturns,
+};
 
 if (require.main === module) {
-(async () => {
-  console.log('CORRETOR CNA');
-  console.log('============\n');
+  (async () => {
+    console.log('CORRETOR CNA');
+    console.log('============\n');
+    session.cleanupStale();
+    session.newSessionFile();
 
-  // Contexto novo + sessão temporária desta execução (limpa resíduos antigos).
-  session.cleanupStale();
-  session.newSessionFile();
-
-  try {
-    // 0. Login manual SEMPRE (contexto novo, sem cookies anteriores).
-    console.log('Iniciando com um navegador novo.\n');
-    if (!run('login.js')) { console.error('\nLogin não concluído. Nada foi coletado.'); process.exitCode = 1; return; }
-
-    // 1. Coleta (ou retomada) — mesma autenticação da execução.
-    let data = readAnswers();
-    if (coletaIncompleta(data)) {
-      console.log('\nColeta anterior incompleta detectada. Retomando...');
-      console.log('Os arquivos já recebidos foram preservados.\n');
-    } else {
-      console.log('\nIniciando coleta de atividades...\n');
-      const ok = run('scraper.js');
-      if (!ok) { console.error('\nNão consegui coletar do portal. Verifique a conexão e tente novamente.'); process.exitCode = 1; return; }
-      data = readAnswers();
-    }
-    // Conta sem pendências: o scraper encerra sem gravar answers.json.
-    // Isso é normal (não é erro) — encerra com sucesso e o finally limpa a sessão.
-    if (!data || !data.collection) {
-      console.log('\nNenhuma pendência encontrada nesta conta. Nada a corrigir. Até a próxima!');
-      return;
-    }
-
-    const collection = data.collection;
-    const total = data.classes
-      ? data.classes.reduce((a, c) => a + c.students.reduce((b, s) => b + s.lessons.filter(l => l.pending).length, 0), 0)
-      : 0;
-    const esperados = collection.batches.length;
-    console.log(`Coleta concluída!`);
-    console.log(`Foram encontradas ${total} atividades.`);
-    console.log(`Foram gerados ${esperados} lotes.\n`);
-    console.log('Envie os arquivos Markdown para a IA de sua preferência.\n');
-    console.log('Salve os retornos na pasta lotes/ usando os nomes:');
-    for (const b of collection.batches)
-      console.log(`- lote-${String(b.num).padStart(2, '0')}.devolvido.md`);
-    console.log('\nAguardando os arquivos devolvidos...');
-
-    // 2. Monitoramento automático (sem ENTER).
-    const vistos = new Set();
-    for (;;) {
-      const { bons, ruins, estaveis } = validados(collection);
-      if (!estaveis && !bons.length && !ruins.length) { await sleep(POLL_MS); continue; }
-      for (const f of ruins) if (!vistos.has(f.name)) {
-        vistos.add(f.name);
-        console.log(`${f.name}: PROBLEMA — ${f.issues.join('; ')}`);
-        console.log('  Corrija o arquivo e salve novamente. Continuo aguardando.');
+    try {
+      console.log('Abrindo um navegador novo. Faça login manualmente no CNA.\n');
+      if (!await run('login.js')) {
+        console.error('\nLogin não concluído. Nada foi coletado.');
+        process.exitCode = 1;
+        return;
       }
-      for (const f of bons) if (!vistos.has(f.name)) {
-        vistos.add(f.name);
-        console.log(`${f.name}: VALIDADO`);
+
+      console.log('\nIniciando uma coleta nova para a conta autenticada nesta execução...');
+      if (!await run('scraper.js')) {
+        console.error('\nNão foi possível coletar as atividades.');
+        process.exitCode = 1;
+        return;
       }
-      console.log(`Arquivos recebidos: ${bons.length}/${esperados}`);
-      const faltam = collection.batches
-        .map(b => String(b.num).padStart(2, '0'))
-        .filter(n => !bons.some(f => f.num === Number(n)));
-      if (bons.length >= esperados && !faltam.length) break;
-      await sleep(POLL_MS);
+      const data = readAnswers();
+
+      if (!data || !data.collection) {
+        console.log('\nNenhuma pendência encontrada. Nada a corrigir.');
+        return;
+      }
+
+      const total = (data.collection.batches || []).reduce(
+        (sum, batch) => sum + Number(batch.total || (batch.refs || []).length), 0
+      );
+      console.log('Coleta pronta: ' + total + ' atividades em ' + data.collection.batches.length + ' lotes.');
+      await runPanel(data.collection);
+      console.log('\nProcessamento encerrado. Consulte report.json e revisao.md.');
+    } finally {
+      session.cleanup();
     }
-
-    console.log('\nTodos os lotes esperados foram recebidos e validados.');
-    console.log('Iniciando aplicação automática...\n');
-
-    // 3. Aplica no portal (preenche + FINALIZA as PRONTAS).
-    if (!run('executor.js')) { console.error('\nA aplicação encontrou problemas. Reveja revisao.md.'); process.exitCode = 1; return; }
-    console.log('\nPROCESSAMENTO CONCLUÍDO. Confira revisao.md e report.json na pasta do programa.');
-  } finally {
-    // Encerramento normal OU inesperado: descarta cookies e arquivos temporários.
-    session.cleanup();
-  }
-})().catch(e => {
-  try { session.cleanup(); } catch { /* ignorar */ }
-  console.error('Erro:', e.message);
-  process.exit(1);
-});
+  })().catch(error => {
+    try { session.cleanup(); } catch { /* best effort */ }
+    console.error('Erro:', error.message);
+    process.exit(1);
+  });
 }

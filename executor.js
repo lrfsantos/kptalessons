@@ -1,7 +1,7 @@
 // ============================================================
 // CNA Corretor — EXECUTOR (aplica as correções da IA)
 //
-// Lê os lotes devolvidos pela IA (lotes/lote-NN.devolvido.md),
+// Lê os retornos aceitos pelo painel (lotes/retornos-da-IA/lote-NN.md),
 // valida cada entrada (guard.js), preenche classificação + feedback
 // no portal e FINALIZA cada atividade PRONTA (regra absoluta do produto).
 // Entradas em revisao.md nunca são preenchidas nem finalizadas.
@@ -27,9 +27,16 @@ const CFG = require('./lib/config');
 function findReturnedFiles() {
   const explicit = process.argv.slice(2).filter(a => !a.startsWith('--'));
   if (explicit.length) return explicit;
+  if (fs.existsSync(CFG.RETURNS_DIR)) {
+    const current = fs.readdirSync(CFG.RETURNS_DIR)
+      .filter(f => /^lote-\d{2,}\.md$/i.test(f))
+      .map(f => path.join(CFG.RETURNS_DIR, f));
+    if (current.length) return current;
+  }
+  // Compatibilidade com coletas antigas, anteriores ao painel.
   if (!fs.existsSync(CFG.LOTES_DIR)) return [];
   return fs.readdirSync(CFG.LOTES_DIR)
-    .filter(f => /\.devolvido\.md$/i.test(f))
+    .filter(f => /^lote-\d{2,}\.devolvido\.md$/i.test(f))
     .map(f => path.join(CFG.LOTES_DIR, f));
 }
 
@@ -53,7 +60,7 @@ function indexOriginals(data) {
 
   const files = findReturnedFiles();
   if (!files.length) {
-    console.error(`❌ Nenhum arquivo *.devolvido.md em ${CFG.LOTES_DIR}. Devolva os lotes corrigidos pela IA.`);
+    console.error(`❌ Nenhum retorno válido em ${CFG.RETURNS_DIR}. Cole as respostas no Painel de Correção.`);
     process.exit(1);
   }
   if (!fs.existsSync(CFG.ANSWERS_FILE)) {

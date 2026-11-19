@@ -1,27 +1,24 @@
 # Corretor CNA
 
 Ferramenta **gratuita** para professores do CNA corrigirem atividades escritas do portal
-(app.cna.com.br).Você escolhe a IA (Gemini, ChatGPT ou outra) — o programa não tem API própria,
+(app.cna.com.br). Você escolhe a IA (Gemini, ChatGPT ou outra) — o programa não tem API própria,
 não cobra nada e não envia dados para nenhum serviço pago.
 
-## Como usar (primeira página)
+## Como usar
 
-1. **Abra a pasta** `Corretor CNA` e dê **dois cliques** em `Corrigir.cmd`. Não precisa
-   instalar nada: Node.js, Playwright e o navegador já vêm dentro da pasta.
-2. **Toda vez:** o programa abre um navegador **novo** na tela de login do CNA. Faça login
-   com a sua conta. O programa reconhece sozinho quando o login termina (não precisa apertar
-   ENTER) e começa a coletar. **Ao fechar, nada da sua sessão fica salvo** — na próxima vez
-   será preciso login de novo. Sua senha nunca é pedida nem guardada.
-3. O programa **coleta as atividades pendentes** e cria os arquivos na pasta `lotes/`.
-4. **Envie cada arquivo Markdown para a IA** que você preferir e salve o retorno na pasta
-   `lotes/` com o nome indicado na tela (por exemplo `lote-01.devolvido.md`).
-5. **Não precisa fazer mais nada:** o programa detecta os arquivos sozinho, confere se estão
-   corretos e, quando todos chegarem, preenche e **FINALIZA automaticamente** cada atividade
-   aprovada no portal.
-6. Atividades suspeitas ou inválidas **não são finalizadas**: ficam explicadas em `revisao.md`
-   para você decidir com calma.
+1. Abra `Corrigir.cmd`. O aplicativo abre o Chromium em uma sessão nova.
+2. Faça login manualmente no portal CNA. O programa reconhece a autenticação automaticamente.
+3. O programa coleta as atividades pendentes e abre o Painel Local de Correção.
+4. No painel, clique em **Copiar lote** e cole o conteúdo na IA que preferir. Também é possível copiar todos os lotes, se a IA aceitar o volume.
+5. Copie a resposta da IA e cole no painel. Ela pode conter um lote ou vários lotes juntos.
+6. Clique em **Validar e receber retorno**. O programa identifica as atividades pelas referências, confere nonce e campos obrigatórios e separa os retornos internamente.
+7. Quando todos os lotes estiverem recebidos, o programa valida cada atividade e aplica/finaliza as que estiverem prontas no portal.
 
-Cada professor deve usar a **sua própria cópia da pasta** e a **sua própria conta CNA**.
+**Não é necessário salvar, criar ou renomear arquivos de retorno.** Se a IA oferecer um arquivo Markdown para download, o painel também permite importá-lo, mas copiar e colar é o caminho principal.
+
+Atividades suspeitas ou inválidas não são finalizadas: ficam explicadas em `revisao.md` para decisão humana.
+
+Cada professor deve usar sua própria cópia da pasta e sua própria conta CNA.
 
 ## Login toda vez (sem contas salvas)
 
@@ -48,41 +45,23 @@ verificações continua exigindo atenção.
 
 ## Fluxo completo
 
-1. **Login manual (toda vez)** — `npm run login`. Abre um navegador NOVO, o professor loga com a
-   própria conta; o estado fica só nesta execução, em `%TEMP%`, e é descartado ao fechar.
-   Nenhuma senha fica no programa.
-2. **Coleta** — `npm run scrape`. O programa navega o portal sozinho (turmas → alunos →
-   lições pendentes), captura **enunciado e resposta** de cada atividade escrita
-   pendente, e gera:
-   - `answers.json` — cópia interna de referência (usada para detectar alterações da IA);
-   - `lotes/lote-01.md`, `lote-02.md`, … — documentos MD para a IA, divididos em lotes,
-     cada um com as instruções de correção (INJECT) no topo e um **nonce único**.
+1. **Login manual:** sempre em uma sessão nova. Nenhum login é reutilizado na próxima inicialização.
+2. **Coleta:** o programa navega turmas, alunos e atividades pendentes. Gera `answers.json` local e documentos `lotes/lote-NN.md`, com INJECT e nonce próprios da coleta.
+3. **Transferência com a IA:** o Painel Local abre no Chromium. O professor copia um lote ou todos, cola na IA e depois cola a resposta no painel. Não precisa lidar com nomes ou extensões.
+4. **Retornos combinados:** se a IA devolver vários lotes em um único documento, o painel identifica as atividades pelas refs e as distribui aos lotes correspondentes. Lotes incompletos ficam aguardando; refs ausentes, estranhas, duplicadas ou nonce incorreto são rejeitados.
+5. **Aplicação:** quando todos os lotes forem recebidos, o executor relê cada atividade no portal, valida os dados, seleciona CORRETO/PARCIAL/INCORRETO, preenche o feedback, clica em Finalizar e só registra `appliedRefs` depois da confirmação real do portal.
+6. **Revisão:** entradas suspeitas, inválidas ou divergentes não são preenchidas nem finalizadas; aparecem em `revisao.md`.
 
-   Atividades cuja captura falha NÃO entram no MD: são avisadas no terminal (turma/aluno/ref),
-   ficam de fora e são contadas no final. Resposta **realmente em branco** (o aluno enviou
-   vazio — página carregou e o campo está vazio) É capturada como `(vazia)` e entra
-   normalmente. Arquivo `debug_*.html` ocasional é diagnóstico temporário (gitignored).
-3. **Correção pela IA (passo humano)** — o professor abre cada lote, cola na IA que
-   preferir e salva a resposta como `lotes/lote-01.devolvido.md` (mesmo nome, com
-   `.devolvido` antes da extensão).
-4. **Aplicação** — `npm run apply`. O programa:
-   - valida **cada entrada** (ver "Validação" abaixo);
-   - abre a lição no portal, marca a classificação e digita o feedback;
-   - **clica em Finalizar** nas PRONTAS (regra absoluta do produto); entradas em revisao.md nunca são preenchidas nem finalizadas;
-   - só registra como concluída no `appliedRefs` a atividade cuja finalização foi confirmada no portal;
-   - gera `report.json` (estatísticas) e `revisao.md` (o que precisa de atenção humana).
+A pasta `lotes/retornos-da-IA/` é usada internamente para guardar os retornos validados durante a execução e permitir retomada. O professor não precisa abri-la nem gerenciar seus arquivos.
 
 ## Como rodar
 
-Requisitos: Node.js ≥ 18 e Microsoft Edge (ou Chrome/Chromium).
+Na distribuição portátil, Node.js, Playwright e Chromium vêm dentro da própria pasta. Para desenvolvimento, use Node.js ≥ 18.
 
 ```bash
 npm install          # instala playwright-core
-npm run login        # login manual (contexto novo, toda vez)
-npm run corrigir     # o fluxo completo de uma vez (ver abaixo)
-npm run scrape       # só coleta pendências (etapas separadas)
-npm run apply        # valida e finaliza no portal
-npm test             # testes do parser e da guarda (não acessam a rede)
+npm run corrigir     # fluxo principal: login, coleta, painel e aplicação
+npm test             # testes locais, sem acesso ao portal
 ```
 
 ## O botão do professor: duplo clique e roda
@@ -98,48 +77,33 @@ IA e aplica + finaliza as PRONTAS sozinho — sem abrir terminal.
 
 ## Levar para outro computador (outro professor)
 
-A pasta `corretor cna` é **auto-suficiente**: tem o programa, as dependências (`node_modules`)
-e o runtime Node embutido (`runtime/`). O professor não instala **nada** — só abre a pasta e
-dá duplo clique em **`Corrigir.cmd`**:
+A pasta de distribuição contém o aplicativo, as dependências, o runtime Node e o Chromium portátil. Cada professor usa sua própria cópia e faz login na própria conta.
 
-1. Copie a pasta `corretor cna` para o computador do professor (pen drive, rede, nuvem)
-2. Abra a pasta → duplo clique em **`Corrigir.cmd`** — ele usa o Node e o navegador que vêm
-   dentro da própria pasta (nada é instalado no computador)
-3. Toda vez: ele abre o login do portal — o professor digita a **própria conta dele**
-   (nada fica salvo; na próxima vez é preciso logar de novo)
-4. O programa coleta, **monitora a pasta sozinho** (sem apertar ENTER) e, quando todos os
-   lotes devolvidos estiverem válidos, aplica e finaliza automaticamente
+1. Copie a pasta de distribuição para o computador do professor.
+2. Abra a pasta e execute `Corrigir.cmd`.
+3. Faça login manualmente no portal CNA.
+4. Use o Painel Local para copiar lotes, transferir o conteúdo para a IA escolhida e colar as respostas de volta.
 
-Único requisito: Microsoft Edge (ou Chrome) — já vem com o Windows.
-
-Se quiser um atalho na Área de Trabalho do outro PC: clique com o direito em
-`Corrigir.cmd` → Enviar → Área de Trabalho.
-
-**NÃO copie** (são dados seus/dos seus alunos, e não pertencem ao outro PC):
-`answers.json`, `lotes/`, `revisao.md`, `report.json`, `relatorio-ia.md`,
-`all_answers.txt`, `debug_*.html`. O que vai na pasta: programa, INJECT, exemplos fictícios,
-testes, dependências e este README.
+Não copie dados de alunos, lotes de execuções anteriores, relatórios ou sessões de outro professor.
 
 ## Um comando só: `npm run corrigir`
 
-```
-npm run corrigir
-```
-1. **Coleta no portal** — o programa abre o site, coleta as respostas e gera `lotes/lote-NN.md`
-2. **Você na IA (manual, por design — sem chave de API)** — cole cada lote na sua IA e salve
-   o retorno como `lotes/lote-NN.devolvido.md`
-3. **Monitora a pasta automaticamente** (sem ENTER) até todos os lotes válidos chegarem;
-   o programa aplica e **finaliza** cada uma das PRONTAS
+O fluxo principal executa login, coleta, abre o Painel Local e aplica as correções depois que todos os lotes forem validados.
 
-Variáveis opcionais (`.env.example`): `HEADLESS`, `LOTE_SIZE`, `NAV_TIMEOUT` —
-use com `node --env-file=.env scraper.js`.
+1. O programa gera os arquivos internos `lotes/lote-NN.md`.
+2. O Painel Local permite copiar um lote ou todos os lotes.
+3. O professor envia o conteúdo para a IA e cola a resposta completa no painel. A IA pode devolver um ou vários lotes juntos.
+4. O painel identifica as atividades pelas refs e distribui os retornos internamente.
+5. Depois de todos os lotes estarem recebidos e válidos, o executor aplica e finaliza as atividades PRONTAS.
+
+Não é necessário salvar ou renomear arquivos devolvidos. A pasta `lotes/retornos-da-IA/` é interna e serve para retomada e auditoria local.
 
 ## Perguntas e respostas
 
 ### Qual é o formato exato que o parser espera ler de volta?
 
 Cada atividade é uma seção `#### Atividade:` com uma **ref obrigatória** entre colchetes
-e três campos preenchidos:
+e os campos de classificação, score, flag, revisão e feedback preenchidos. O painel recebe o texto colado; não exige nome de arquivo.
 
 ```md
 #### Atividade: Unit 4 Lesson 1 - Atividade 4 [C000002 S000002 U000002 L000002 A000002]
@@ -210,28 +174,18 @@ resposta como texto no DOM (`[data-sel="instruction"]` e `[data-sel="writing"]`)
 programa lê diretamente. Não há imagem a reconhecer no fluxo mapeado. **Status: não
 implementado porque não é exigido**; se o CNA passar a renderizar textos como imagem,
 será preciso adicionar OCR (nenhum instalado hoje) — item registrado em "O que ainda
-não está pronto". Se o OCR falhar ou devolver lixo (quando existir), a resposta capturada
-é comparada com `answers.json` na volta da IA e divergência vai para revisão manual.
+não está pronto". Se um mecanismo futuro de OCR for necessário, sua saída deverá ser validada contra `answers.json`; divergências devem ir para revisão manual.
 
 ### Quantas entradas por MD? Existe divisão em lotes?
 
 Sim. **Padrão: 10 atividades por lote; teto fixo de 10.** `LOTE_SIZE` pode reduzir, nunca
-ultrapassar 10. Cada lote é um arquivo independente com INJECT + nonce próprios, para caber
-no contexto de IAs gratuitas. O professor pode corrigir um lote por vez; 11 atividades geram
-`lote-01.md` e `lote-02.md`.
+ultrapassar 10. Cada lote tem no máximo 10 atividades e contém INJECT + nonce da coleta. O painel permite enviar um lote por vez ou vários juntos quando a IA suportar esse volume; o programa continua organizando e validando cada lote separadamente.
 
 ### Como o programa sabe que o lote devolvido é da coleta atual?
 
-Cada coleta gera um **nonce novo** e grava em `answers.json` a identidade da rodada: nonce,
-número/nome de cada lote e as refs esperadas. O `apply` só aceita arquivos chamados exatamente
-`lote-NN.devolvido.md` (dois dígitos) e rejeita nonce errado, lote de coleta anterior, refs
-ausentes ou estranhas, refs duplicadas e arquivos repetidos. Lotes ainda não devolvidos são
-listados; o professor pode devolvê-los depois e rodar de novo — o que já foi aplicado é
-registrado em `answers.json` (`appliedRefs`) e não é aplicado duas vezes.
+Cada coleta gera um **nonce novo** e grava em `answers.json` a identidade da rodada: nonce, número de cada lote e refs esperadas. O painel não depende de nomes de arquivo: identifica cada atividade pela ref e verifica o nonce, os marcadores, a classificação, o score, a flag, a revisão e o feedback. Refs ausentes, estranhas ou duplicadas são rejeitadas; um lote só é aceito quando todas as atividades dele estão completas. `appliedRefs` só é atualizado após a confirmação de finalização no portal.
 
-Ao iniciar uma coleta nova, os lotes e devolvidos anteriores são movidos para um único
-arquivo `historico-<data>.md` na pasta `lotes/` (com os nomes originais), fora do alcance do
-`apply`. Nada da coleta antiga é apagado ou misturado à nova.
+A cada nova execução, os resultados locais da execução anterior são arquivados antes da coleta, evitando misturar dados de professores diferentes. Os originais e retornos anteriores ficam em histórico local.
 
 ### Alguma nota pode ser lançada sem o professor revisar? Como funciona a etapa antes do Finalizar?
 
@@ -325,15 +279,17 @@ ou o texto não baterem, a entrada cai em revisão e **não** é contada como pr
 ```
 ├── login.js                  # login manual (contexto novo, sessão só em %TEMP%)
 ├── scraper.js                # coleta pendências -> answers.json + lotes/*.md
-├── executor.js               # valida lotes devolvidos e preenche no portal
+├── executor.js               # valida retornos do painel e preenche no portal
 ├── instrucoes_correcao.md    # INJECT (template com {{NONCE}}) embutido no MD
 ├── lib/
 │   ├── config.js             # caminhos/URLs/constantes
 │   ├── browser.js            # navegador novo (sem perfil persistente)
 │   ├── portal.js             # navegação + leitura + preenchimento (data-sel)
-│   ├── md.js                 # geração dos lotes + parser do MD devolvido
+│   ├── md.js                 # geração, parser e validação de retornos combinados
+│   ├── panel.js              # servidor local do painel
 │   └── guard.js              # pré-filtro de injeção + validação de entradas
-├── exemplos/                 # MD gerado e MD devolvido (dados fictícios)
+├── ui/painel.html            # interface local de copiar/colar
+├── exemplos/                 # MDs de exemplo (dados fictícios)
 ├── tests/                    # testes do parser e da guarda (node --test)
 ├── .env.example              # placeholders (nenhum segredo é usado)
 └── package.json
@@ -347,8 +303,7 @@ navegando, nada é fixo no código.
 
 ## Evidência de testes (para auditoria)
 
-**Automatizados (reproduzíveis no GitHub):** `npm test` → 100 testes, 100 pass, 0 fail.
-Não exigem rede, portal nem dados reais.
+**Automatizados:** execute `npm test`. Os testes não acessam o portal nem usam dados reais. A contagem deve ser obtida da execução atual, não de um número fixo neste README.
 
 **Run real (2026-11-19, conta de teste autorizada, números agregados — sem nomes/refs/respostas):**
 - Login em contexto novo, coleta automática, 46 atividades pendentes encontradas
@@ -360,38 +315,14 @@ Não exigem rede, portal nem dados reais.
 - Sessão temporária removida ao encerrar: nenhum `session.json`, nenhum resíduo em `%TEMP%`
 - Os arquivos completos (`report.json`, `answers.json`, lotes com respostas reais) ficam
   **somente na máquina do professor** e são gitignored — por privacidade, não entram no repo
-- Para a auditora inspecionar a mesma operação: `exemplos/run-46/` contém uma **réplica
-  sanitizada** (10 arquivos: 5 lotes gerados + 5 devolvidos, 46 atividades fictícias, mesma
-  divisão 10/10/10/10/6 e distribuição 30 CORRETO / 8 INCORRETO / 8 PARCIAL). O teste
-  `tests/exemplo46.test.js` valida essa réplica (rode `npm test`).
+- Para auditoria, `exemplos/run-46/` contém uma **réplica fictícia e sanitizada** com cinco lotes de entrada e cinco retornos, somando 46 atividades. Ela reproduz a estrutura e a distribuição agregada, não o texto das respostas reais. `tests/exemplo46.test.js` verifica essa réplica.
 
-## Status (o que ainda não está pronto)
+## Estado atual e próximos testes
 
-- **Finalização automática obrigatória**: o `apply` FINALIZA sozinho as atividades PRONTAS
-  (nunca as de `revisao.md`) e só registra `appliedRefs` após confirmação no portal. O botão
-  Finalizar é clique único com alerta de ~2s, sem confirmação — verificado ao vivo.
-- **Incidente conhecido (2026-11-19)**: durante a demo de gravação do botão, o professor
-  clicou em Finalizar na atividade "Lesson 1 > Atividade 4 - Writing" (Unit 4, Lesson 367,
-  A000002) com conteúdo de teste — ficou gravada como Parcial com feedback "very good".
-  Irreversível. Essa atividade fica excluída das próximas coletas (consta CORRIGIDA).
-- **Auditoria de 2026-11 (T1–T10) aplicada**: parser orientado ao marcador (T1), corte do
-  feedback (T2), tolerância a cerca de código (T3), INJECT oficial (T4), regras T5 em
-  código, fail-safe antes de preencher (T6), relatório da IA em `relatorio-ia.md` (T7),
-  `LOTE_SIZE` padrão 10 (teto 10) + identificação de coleta/nonce, arquivamento de lotes
-  antigos, login automático no wizard, distribuição autocontida; testes + README (T9) e
-  privacidade do MD com máscaras (T10). Testes: 68 passando.
-- **Execução ponta a ponta real ainda não rodou com o fail-safe T6** — o fluxo no portal
-  (coleta e preenchimento) foi mapeado e o cabeçalho real conferido no HTML, mas o `apply`
-  completo com as verificações (a)/(b)/(d) ainda não rodou em produção.
-- **OCR não existe** — não é necessário no fluxo atual (texto vem do DOM). Ver FAQ.
-- **Tela de revisão é em arquivo (`revisao.md`) + portal** — não há interface gráfica
-  própria; o professor revisa no próprio site.
-- **"Corrigir Provas" (provas objetivas/agendadas) fora do escopo** — apenas atividades
-  escritas (`writing`).
-- **Paginação de turmas** implementada, mas só exercitada com 1 página até agora.
-- **Idioma do portal**: interface em português (BR) é o padrão testado; alternar para EN
-  não foi testado.
-- **Nonce vs. IAs**: se a IA remover/alterar os marcadores com nonce, a entrada cai em
-  revisão manual (comportamento seguro, mas o lote não é aplicado automaticamente).
-- **Repositório privado**: o repositório precisa ser PRIVADO (hoje é possível clonar sem
-  login) — ver limitações.
+- **Motor de correção:** o fluxo de classificação, feedback, clique em Finalizar e confirmação no portal foi validado em uma execução real anterior de 46 atividades. A validação do portal continua obrigatória antes de registrar uma atividade como finalizada.
+- **Painel Local:** interface de copiar/colar implementada para eliminar a necessidade de criar e renomear arquivos de retorno. Aceita uma resposta contendo um ou vários lotes e distribui as atividades pelas refs.
+- **Integração nova ainda precisa de teste real:** a transferência pelo painel, especialmente respostas combinadas e parciais, precisa ser testada com uma nova execução controlada antes de considerar essa experiência validada em produção.
+- **IA externa:** o professor escolhe e utiliza manualmente a IA de sua preferência. Não há API, chave ou serviço pago embutido.
+- **Privacidade:** respostas, lotes, relatórios e sessões temporárias não devem ser versionados. O painel opera em `127.0.0.1` e não envia textos para um servidor remoto.
+- **Limite:** máximo de 10 atividades por lote; não foi aumentado.
+
