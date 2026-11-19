@@ -345,6 +345,22 @@ Seletores do portal: o site expõe atributos `data-sel` (`class-link`, `student-
 semestres. Turmas/alunos mudam por semestre e por professor — o programa descobre tudo
 navegando, nada é fixo no código.
 
+## Evidência de testes (para auditoria)
+
+**Automatizados (reproduzíveis no GitHub):** `npm test` → 100 testes, 100 pass, 0 fail.
+Não exigem rede, portal nem dados reais.
+
+**Run real (2026-11-19, conta de teste autorizada, números agregados — sem nomes/refs/respostas):**
+- Login em contexto novo, coleta automática, 46 atividades pendentes encontradas
+- 5 lotes gerados: 10 + 10 + 10 + 10 + 6 (teto de 10 por lote respeitado)
+- 5 devolvidos validados (nonce + refs); 46 entradas prontas, 0 revisão
+- 46 atividades preenchidas e **finalizadas com confirmação no portal** (46/46), 0 falhas
+- Classificações: CORRETO 30 | INCORRETO 8 | PARCIAL 8; média de score 81
+- 46 refs em `appliedRefs`, gravadas somente após confirmação da finalização
+- Sessão temporária removida ao encerrar: nenhum `session.json`, nenhum resíduo em `%TEMP%`
+- Os arquivos completos (`report.json`, `answers.json`, lotes com respostas reais) ficam
+  **somente na máquina do professor** e são gitignored — por privacidade, não entram no repo
+
 ## Status (o que ainda não está pronto)
 
 - **Finalização automática obrigatória**: o `apply` FINALIZA sozinho as atividades PRONTAS
