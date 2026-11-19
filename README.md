@@ -360,6 +360,10 @@ Não exigem rede, portal nem dados reais.
 - Sessão temporária removida ao encerrar: nenhum `session.json`, nenhum resíduo em `%TEMP%`
 - Os arquivos completos (`report.json`, `answers.json`, lotes com respostas reais) ficam
   **somente na máquina do professor** e são gitignored — por privacidade, não entram no repo
+- Para a auditora inspecionar a mesma operação: `exemplos/run-46/` contém uma **réplica
+  sanitizada** (10 arquivos: 5 lotes gerados + 5 devolvidos, 46 atividades fictícias, mesma
+  divisão 10/10/10/10/6 e distribuição 30 CORRETO / 8 INCORRETO / 8 PARCIAL). O teste
+  `tests/exemplo46.test.js` valida essa réplica (rode `npm test`).
 
 ## Status (o que ainda não está pronto)
 
