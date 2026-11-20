@@ -104,7 +104,7 @@ async function runPanel(collection) {
   });
   let panelBrowser = null;
   try {
-    const opened = await launch({ fresh: true, headless: false });
+    const opened = await launch({ fresh: true, headless: false, viewport: null });
     panelBrowser = opened.browser;
     panelBrowser.on('disconnected', () => {
       if (!panel.getState().done) panel.abort('A janela do Painel Local foi fechada antes de todos os retornos serem recebidos.');
