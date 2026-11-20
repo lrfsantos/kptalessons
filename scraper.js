@@ -34,6 +34,10 @@ const loteSize = parseInt(arg('lote', String(CFG.LOTE_SIZE || 10)), 10) || 10;
 
 function archivePreviousRun() {
   fs.mkdirSync(CFG.LOTES_DIR, { recursive: true });
+  const existing = fs.readdirSync(CFG.LOTES_DIR)
+    .some(f => /^lote-\d+\.md$|^lote-\d+\.devolvido\.md$|^historico-/.test(f)) ||
+    fs.existsSync(CFG.ANSWERS_FILE);
+  if (!existing) return false;
   const stamp = Date.now();
   const historyDir = path.join(CFG.LOTES_DIR, 'historico-run-' + stamp);
   const dataFiles = [
@@ -48,6 +52,7 @@ function archivePreviousRun() {
     }
   }
   md.archivePrevious(CFG.LOTES_DIR);
+  return true;
 }
 
 (async () => {
@@ -55,7 +60,8 @@ function archivePreviousRun() {
 
   // Cada login pertence a uma única execução/professor. Arquive tudo da execução anterior
   // antes de coletar, evitando que answers.json ou lotes de outra conta sejam reutilizados.
-  archivePreviousRun();
+  const archived = archivePreviousRun();
+  if (archived) console.log('📦 Execução anterior arquivada (documentos preservados). Iniciando coleta nova.\n');
   const { browser, page } = await launch({ headless: CFG.HEADLESS === true });
   const classes = [];
   const captureFailures = []; // { ref, turma, aluno, title }
@@ -77,6 +83,16 @@ function archivePreviousRun() {
 
       for (const s of students) {
         const lessons = await portal.listLessons(page, c.classId, s.studentId);
+        if (lessons.listError) {
+          // Pendências segundo o portal, mas a lista não pôde ser enumerada.
+          captureFailures.push({
+            turma: c.name, aluno: s.name, alunoId: s.studentId, turmaId: c.classId,
+            stage: 'listLessons', reason: lessons.listError,
+          });
+          console.warn(`⚠️  Falha ao listar lições: ${c.name} → ${s.name}: ${lessons.listError}`);
+          turma.students.push({ name: s.name, studentId: s.studentId, pending: s.pending, lessons: [] });
+          continue;
+        }
 
         // IMPORTANTE: monta a lista e CAPTURA no mesmo objeto que vai para o MD.
         // (Bug real antigo: a captura gravava em objetos que eram descartados
@@ -91,25 +107,34 @@ function archivePreviousRun() {
           };
 
           if (entry.pending && entry.ids) {
-            await page.goto(
-              portal.activityUrl(entry.ids.classId, entry.ids.studentId, entry.ids.unitId, entry.ids.lessonId, entry.ids.activityId),
-              { waitUntil: 'domcontentloaded' }
-            );
-            const d = await portal.readActivity(page);
-            if (!d.captured) {
-              entry.pending = false;          // não vai para o MD
+            try {
+              await page.goto(
+                portal.activityUrl(entry.ids.classId, entry.ids.studentId, entry.ids.unitId, entry.ids.lessonId, entry.ids.activityId),
+                { waitUntil: 'domcontentloaded' }
+              );
+              const d = await portal.readActivity(page);
+              if (!d.captured) {
+                entry.pending = false;          // não vai para o MD
+                entry.capture_failed = true;
+                captureFailures.push({ ref: md.refOf(entry.ids), turma: c.name, aluno: s.name,
+                  title: entry.title, stage: 'readActivity', reason: 'enunciado/resposta não carregaram' });
+                console.warn(`⚠️  Falha de captura: ${c.name} → ${s.name} → ${entry.title} [${md.refOf(entry.ids)}]`);
+              } else {
+                entry.question = d.question;
+                entry.answer = d.answer;
+                entry.blank = d.blank;
+                entry.prefilter = preFilter(d.answer); // (b) pré-filtro de injeção
+                // (T6a) título do breadcrumb no portal — comparado antes de preencher
+                const bc = await portal.readBreadcrumb(page);
+                entry.breadcrumb = bc.ok ? bc.title : '';
+                if (d.blank) blanks.push(md.refOf(entry.ids));
+              }
+            } catch (err) {
+              entry.pending = false;
               entry.capture_failed = true;
-              captureFailures.push({ ref: md.refOf(entry.ids), turma: c.name, aluno: s.name, title: entry.title });
-              console.warn(`⚠️  Falha de captura: ${c.name} → ${s.name} → ${entry.title} [${md.refOf(entry.ids)}]`);
-            } else {
-              entry.question = d.question;
-              entry.answer = d.answer;
-              entry.blank = d.blank;
-              entry.prefilter = preFilter(d.answer); // (b) pré-filtro de injeção
-              // (T6a) título do breadcrumb no portal — comparado antes de preencher
-              const bc = await portal.readBreadcrumb(page);
-              entry.breadcrumb = bc.ok ? bc.title : '';
-              if (d.blank) blanks.push(md.refOf(entry.ids));
+              captureFailures.push({ ref: md.refOf(entry.ids), turma: c.name, aluno: s.name,
+                title: entry.title, stage: 'navegação', reason: err.message });
+              console.warn(`⚠️  Falha isolada: ${c.name} → ${s.name} → ${entry.title}: ${err.message}`);
             }
           }
           alunoLessons.push(entry);
@@ -130,12 +155,22 @@ function archivePreviousRun() {
     if (blanks.length) console.log(`ℹ️  ${blanks.length} resposta(s) realmente em branco (foram incluídas): ${blanks.join('; ')}`);
 
     const pendentes = classes.reduce((a, c) => a + c.students.reduce((b, s) => b + s.lessons.filter(l => l.pending).length, 0), 0);
-    if (!pendentes) {
-      const generatedAt = new Date().toISOString();
-      fs.writeFileSync(CFG.ANSWERS_FILE, JSON.stringify({ generatedAt, collection: null, captureFailures, classes, appliedRefs: [] }, null, 2));
-      console.log('\n✅ Nenhuma pendência capturada. Nada a exportar.');
+    const capturadas = classes.reduce((a, c) => a + c.students.reduce((b, s) => b + s.lessons.filter(l => l.pending && !l.capture_failed).length, 0), 0);
+    const generatedAt = new Date().toISOString();
+    if (!pendentes && !captureFailures.length) {
+      // Caso A: nada pendente de verdade.
+      fs.writeFileSync(CFG.ANSWERS_FILE, JSON.stringify({ generatedAt, collection: null, captureFailures: [], classes, appliedRefs: [] }, null, 2));
+      console.log('\n✅ Nenhuma atividade pendente. Nada a corrigir.');
       return;
     }
+    if (!capturadas) {
+      // Caso C: havia trabalho, mas nada pôde ser capturado.
+      fs.writeFileSync(CFG.ANSWERS_FILE, JSON.stringify({ generatedAt, collection: null, captureFailures, classes, appliedRefs: [], captureFailed: true }, null, 2));
+      console.error(`\n❌ Havia ${captureFailures.length} atividade(s)/aluno(s) pendente(s), mas nenhuma pôde ser capturada.`);
+      console.error('   O diagnóstico ficou em answers.json (captureFailures). Nenhum lote foi gerado.');
+      process.exit(2);
+    }
+    // Caso B: captura parcial — processa o que deu certo e reporta o resto.
 
     // 4. Gera os lotes MD (nonce novo + INJECT em cada lote) e salva a
     //    identidade da coleta junto com os dados estruturados (T12).
