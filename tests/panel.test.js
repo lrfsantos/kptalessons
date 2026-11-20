@@ -4,7 +4,34 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+test('marcadores reescritos como <<>> pela IA são restaurados pelo nonce da coleta', () => {
+  const collection = { nonce, batches: [{ num: 1, refs: [ref1], total: 1 }] };
+  const normal = doc(ref1, 'I went to the park and studied.');
+  const mangled = normal
+    .split('<<<RESPOSTA-INICIO-' + nonce + '>>>').join('<<>>')
+    .split('<<<RESPOSTA-FIM-' + nonce + '>>>').join('<<>>');
+  const r = md.inspectCombinedReturn(mangled, collection, []);
+  assert.deepEqual(r.globalIssues, []);
+  assert.equal(r.acceptedBatches.length, 1);
+  assert.ok(r.acceptedBatches[0].content.includes('<<<RESPOSTA-INICIO-' + nonce + '>>>'), 'marcadores restaurados no retorno gravado');
+});
+
+test('marcadores <<>> NÃO escondem alteração da resposta do aluno', () => {
+  const collection = { nonce, batches: [{ num: 1, refs: [ref1], total: 1 }] };
+  const normal = doc(ref1, 'I went to the park and studied.');
+  const mangled = normal
+    .split('<<<RESPOSTA-INICIO-' + nonce + '>>>').join('<<>>')
+    .split('<<<RESPOSTA-FIM-' + nonce + '>>>').join('<<>>')
+    .replace('I went to the park and studied.', 'The AI invented a different answer.');
+  const r = md.inspectCombinedReturn(mangled, collection, []);
+  // A restauração não valida a resposta sozinha: o executor compara com answers.json.
+  assert.equal(r.acceptedBatches.length, 1, 'estrutura aceita; conteúdo será comparado no executor');
+  const restored = md.restoreMangledMarkers(mangled, nonce);
+  assert.ok(restored.includes('The AI invented a different answer.'), 'alteração continua visível no texto restaurado');
+});
+
 const { createPanel } = require('../lib/panel');
+const md = require('../lib/md');
 
 const nonce = 'abc123def456';
 const ref1 = 'C1 S2 U3 L4 A5';
