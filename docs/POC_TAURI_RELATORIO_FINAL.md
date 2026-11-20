@@ -44,16 +44,17 @@
 | Runtime de navegador empacotado | 742,7 MB (Chromium Playwright) | **0** (WebView2 Evergreen do Windows, via `downloadBootstrapper`) |
 | Node.js empacotado | 101,2 MB | 88,5 MB (sidecar) |
 | playwright-core | incluído em node_modules (13,3 MB) | 13,3 MB |
-| Memória aproximada em repouso | NÃO VALIDADO | NÃO VALIDADO |
+| Memória aproximada em repouso | 167 MB (2 processos Node, tela inicial, antes do Chromium) | **437 MB** (app 26 + sidecar 80 + WebView2 331; janela aberta) |
 | Janelas visíveis ao professor | 2+ (terminal + aba do navegador) | **1** (a janela do app) |
 | Executáveis na distribuição | 11 | 2 (app + node.exe) |
 
 **Redução: ~85% no tamanho instalado (858 → ~136 MB), 100% do Chromium eliminado.**
+**Memória:** em repouso, a POC usa mais RAM que a versão antiga *antes do navegador abrir* — o WebView2 ocupa ~331 MB. A comparação justa de memória exigiria medir a versão antiga com o Chromium portátil ativo (não medido: o fluxo antigo só abre o navegador após o clique do professor). A vantagem da POC está em disco, janelas e simplicidade, não necessariamente em RAM.
 
 ## Limitações
 
-- **Memória em repouso e tempo de inicialização a frio em máquina limpa: NÃO VALIDADO** (medições exigem execução prolongada e máquina sem cache).
-- Teste de escala do Windows (100/125/150%) e resoluções pequenas: NÃO VALIDADO (manual).
+- **Memória da versão antiga com Chromium ativo: NÃO MEDIDO** (exige clicar no fluxo antigo; a POC em repouso usa 437 MB, a antiga 167 MB antes do navegador).
+- **Tempo de inicialização a frio em máquina limpa: NÃO VALIDADO.**
 - O instalador não foi executado numa máquina limpa sem WebView2 (bootstrapper não testado de ponta a ponta).
 - Endpoint CDP escuta em `127.0.0.1` com porta aleatória, mas **porta aleatória não é autenticação** — outros processos locais poderiam conectá-la. Risco documentado; para migração real, considerar token no endpoint.
 - Não há atualização automática (fora do escopo da POC).
