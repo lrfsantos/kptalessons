@@ -100,10 +100,11 @@ Não é necessário salvar ou renomear arquivos devolvidos. A pasta `lotes/retor
 
 ## Perguntas e respostas
 
-### Qual é o formato exato que o parser espera ler de volta?
+### Qual é o formato que o parser espera ler de volta?
 
 Cada atividade é uma seção `#### Atividade:` com uma **ref obrigatória** entre colchetes
-e os campos de classificação, score, flag, revisão e feedback preenchidos. O painel recebe o texto colado; não exige nome de arquivo.
+e os campos de classificação, score, flag, revisão e feedback preenchidos. O painel recebe o
+texto colado; não exige nome de arquivo.
 
 ```md
 #### Atividade: Unit 4 Lesson 1 - Atividade 4 [C000002 S000002 U000002 L000002 A000002]
@@ -119,6 +120,17 @@ e os campos de classificação, score, flag, revisão e feedback preenchidos. O 
 **Feedback:**
 1 ou 2 parágrafos.
 ```
+
+**Formatação tolerada:** o painel aceita Markdown convencional (`**Rótulo:**`), Markdown
+escapado (`\*\*Rótulo:\*\*`), texto simples (`Rótulo:`), blockquotes (`> **Rótulo:**`),
+listas (`- **Rótulo:**`) e até todos os campos na mesma linha. IAs que trocam os marcadores
+por `<<>>`, `<<<>>>` ou `> >` também são aceitas: o programa restaura cada marcador
+individualmente usando o nonce da coleta. Cabeçalhos `#### **Atividade: ...**`, CRLF e
+espaços extras são normalizados. O conteúdo da resposta do aluno **não** é alterado.
+
+**Conteúdo rigoroso:** os cinco campos continuam obrigatórios, com valores válidos. Score
+ausente ou inválido, Flag/Revisão desconhecidos, feedback vazio e `AGUARDANDO` mantêm a
+atividade em revisão. A formatação é tolerante; o conteúdo não.
 
 - A ref `[C… S… U… L… A…]` identifica turma/aluno/unit/lesson/activity no portal.
 - O nonce aparece no cabeçalho do lote e nos marcadores da resposta.
