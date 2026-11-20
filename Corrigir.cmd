@@ -25,13 +25,7 @@ for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%~dp0.env") do (
 
 echo Verificando componentes locais...
 "%~dp0runtime\node\node.exe" preflight.js
-if errorlevel 1 (
-  echo.
-  echo ERRO: pre-flight falhou. Veja as mensagens acima.
-  echo A janela permanece aberta para voce ler.
-  pause
-  exit /b 1
-)
+if errorlevel 1 goto falha_preflight
 echo.
 
 call "%~dp0runtime\node\node.exe" corrigir.js
@@ -41,6 +35,13 @@ if not "%EXITCODE%"=="0" echo O programa encontrou um problema. Anote a mensagem
 echo A janela permanece aberta para voce ler.
 pause
 exit /b %EXITCODE%
+
+:falha_preflight
+echo.
+echo ERRO: preflight falhou. Veja as mensagens acima.
+echo A janela permanece aberta para voce ler.
+pause
+exit /b 1
 
 :falha_node
 echo ERRO: Node.js portatil ausente em runtime\node\node.exe.
