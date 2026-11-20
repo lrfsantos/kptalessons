@@ -2,7 +2,7 @@ name: Automated tests
 
 on:
   push:
-    branches: [master]
+    branches: [master, "poc/**"]
   pull_request:
   workflow_dispatch:
 
@@ -31,3 +31,35 @@ jobs:
         run: npm test
       - name: Audit dependencies
         run: npm audit --audit-level=high
+
+  # Prova de conceito Tauri + WebView2 (Windows apenas).
+  tauri-poc:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run automated tests
+        run: npm test
+      - name: Package sidecar resources
+        shell: powershell
+        run: |
+          $node = (node -p "process.execPath")
+          ./scripts/poc-package-resources.ps1 -NodeExe $node
+      - name: cargo check (Tauri)
+        working-directory: src-tauri
+        run: cargo check
+      - name: Build experimental installer (best effort)
+        continue-on-error: true
+        working-directory: src-tauri
+        run: npx --yes @tauri-apps/cli@2 build
