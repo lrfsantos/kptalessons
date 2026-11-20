@@ -45,12 +45,13 @@ verificações continua exigindo atenção.
 
 ## Fluxo completo
 
-1. **Login manual:** sempre em uma sessão nova. Nenhum login é reutilizado na próxima inicialização.
-2. **Coleta:** o programa navega turmas, alunos e atividades pendentes. Gera `answers.json` local e documentos `lotes/lote-NN.md`, com INJECT e nonce próprios da coleta.
-3. **Transferência com a IA:** o Painel Local abre no Chromium. O professor copia um lote ou todos, cola na IA e depois cola a resposta no painel. Não precisa lidar com nomes ou extensões.
-4. **Retornos combinados:** se a IA devolver vários lotes em um único documento, o painel identifica as atividades pelas refs e as distribui aos lotes correspondentes. Lotes incompletos ficam aguardando; refs ausentes, estranhas, duplicadas ou nonce incorreto são rejeitados.
-5. **Aplicação:** quando todos os lotes forem recebidos, o executor relê cada atividade no portal, valida os dados, seleciona CORRETO/PARCIAL/INCORRETO, preenche o feedback, clica em Finalizar e só registra `appliedRefs` depois da confirmação real do portal.
-6. **Revisão:** entradas suspeitas, inválidas ou divergentes não são preenchidas nem finalizadas; aparecem em `revisao.md`.
+1. **Interface de progresso:** ao iniciar, o programa abre no Chromium uma página local com as etapas do fluxo (verificação, login, coleta, IA, aplicação), barra de progresso e log em tempo real. A mesma aba vira o Painel Local no fim — o console preto continua existindo só como registro de fundo.
+2. **Login manual:** sempre em uma sessão nova. Nenhum login é reutilizado na próxima inicialização.
+3. **Coleta:** o programa navega turmas, alunos e atividades pendentes. Gera `answers.json` local e documentos `lotes/lote-NN.md`, com INJECT e nonce próprios da coleta.
+4. **Transferência com a IA:** o Painel Local abre no Chromium (na mesma aba da interface). O professor copia um lote ou todos, cola na IA e depois cola a resposta no painel. Não precisa lidar com nomes ou extensões.
+5. **Retornos combinados:** se a IA devolver vários lotes em um único documento, o painel identifica as atividades pelas refs e as distribui aos lotes correspondentes. Lotes incompletos ficam aguardando; refs ausentes, estranhas, duplicadas ou nonce incorreto são rejeitados.
+6. **Aplicação:** quando todos os lotes forem recebidos, o executor relê cada atividade no portal, valida os dados, seleciona CORRETO/PARCIAL/INCORRETO, preenche o feedback, clica em Finalizar e só registra `appliedRefs` depois da confirmação real do portal.
+7. **Revisão:** entradas suspeitas, inválidas ou divergentes não são preenchidas nem finalizadas; aparecem em `revisao.md`.
 
 A pasta `lotes/retornos-da-IA/` é usada internamente para guardar os retornos validados durante a execução. O professor não precisa abri-la nem gerenciar seus arquivos.
 

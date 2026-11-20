@@ -97,7 +97,7 @@ async function runPanel(collection, uiPage, uiBrowser, ui) {
     // Breve pausa para a interface mostrar "Tudo pronto" antes de trocar de página.
     await sleep(900);
     await uiPage.goto(panel.url, { waitUntil: 'domcontentloaded', timeout: CFG.NAV_TIMEOUT });
-    await uiPage.close(); // a aba da interface não é mais necessária
+    // A MESMA aba vira o Painel Local — fechá-la aqui fechava o painel junto (bug corrigido).
     console.log('\nPainel local aberto no Chromium.');
     console.log('Copie um lote ou todos, envie à IA e cole a resposta no painel.');
     console.log('O retorno pode conter um ou vários lotes. Não é necessário salvar ou renomear arquivos.\n');
