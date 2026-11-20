@@ -1,0 +1,37 @@
+// Verifica integridade estrutural do painel e ausência de padrões de overflow.
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const path = require('path');
+const html = fs.readFileSync(path.join(__dirname, '..', 'ui', 'painel.html'), 'utf8');
+
+test('painel mantém todos os elementos usados pelo script', () => {
+  for (const id of ['phase','total','received','batchProgress','progressBar','copyAll','batches','answer','fileInput','clear','charCount','submit','result','complete']) {
+    assert.ok(html.includes('id="' + id + '"'), 'id ausente: ' + id);
+  }
+});
+
+test('painel usa layout responsivo moderno e sem fontes externas', () => {
+  assert.match(html, /max-width:min\(/);
+  assert.match(html, /repeat\(auto-fit,minmax\(/);
+  assert.match(html, /clamp\(/);
+  assert.match(html, /overflow-wrap:anywhere/);
+  assert.match(html, /white-space:pre-wrap/);
+  assert.match(html, /@media \(max-width:620px\)/);
+  assert.ok(!/https?:\/\//.test(html), 'sem recursos externos');
+  assert.ok(!/grid-template-columns:\s*repeat\(3/.test(html), 'sem grade fixa de 3 colunas');
+});
+
+test('painel mantém bind local, token e serviço sem telemetria', () => {
+  const panel = fs.readFileSync(path.join(__dirname, '..', 'lib', 'panel.js'), 'utf8');
+  assert.match(panel, /server\.listen\(0, '127\.0\.0\.1'/);
+  assert.match(panel, /crypto\.randomBytes\(18\)/);
+  assert.match(panel, /'Cache-Control': 'no-store'/);
+  assert.ok(!/telemetr|analytics|google-analytics|gtag/i.test(html), 'sem telemetria no cliente');
+  assert.match(html, /fetch\(base \+ path/, 'fetch apenas para a API local do painel');
+});
+
+test('mensagens de resultado distinguem aceite parcial', () => {
+  assert.match(html, /const partial = rejected\.length > 0/);
+  assert.match(html, /partial \? 'warn' : 'good'/);
+});
