@@ -18,6 +18,12 @@ test('launch aceita viewport explícito, inclusive null', () => {
   assert.match(code, /viewport,\s*\/\/ null => usa o tamanho real/);
 });
 
+test('launch usa let para headless (sem reatribuir constante)', () => {
+  const code = fs.readFileSync(require.resolve('../lib/browser'), 'utf8');
+  assert.match(code, /let \{ headless = false, fresh = false \} = options/);
+  assert.ok(!/const \{ headless = false/.test(code), 'headless precisa ser reatribuível');
+});
+
 test('somente o Painel Local usa viewport: null', () => {
   const wizard = read('corrigir.js');
   assert.match(wizard, /launch\(\{\s*fresh:\s*true,\s*headless:\s*false,\s*viewport:\s*null\s*\}\)/);
