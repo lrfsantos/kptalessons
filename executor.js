@@ -162,11 +162,14 @@ function indexOriginals(data) {
         // T6a: cabeçalho/breadcrumb do portal deve bater com o título guardado
         const origL = originals.get(r.ref) ? originals.get(r.ref).lesson : null;
         const bc = await portal.readBreadcrumb(page);
-        if (origL && origL.breadcrumb && bc.ok && normText(bc.title) !== normText(origL.breadcrumb)) {
-          r.status = 'REVISAO';
-          r.reasons = [...(r.reasons || []), `cabeçalho do portal "${bc.title}" não bate com o guardado "${origL.breadcrumb}"`];
-          console.log(`REVISÃO: cabeçalho diverge`);
-          continue;
+        if (origL && origL.breadcrumb) {
+          // Breadcrumb esperado existe: a leitura PRECISA ser bem-sucedida e bater.
+          if (!bc.ok || !bc.title || normText(bc.title) !== normText(origL.breadcrumb)) {
+            r.status = 'REVISAO';
+            r.reasons = [...(r.reasons || []), `cabeçalho do portal não conferido (atual: "${bc.title || '(ilegível)'}"; esperado: "${origL.breadcrumb}")`];
+            console.log(`REVISÃO: cabeçalho não confere`);
+            continue;
+          }
         }
 
         // T6b: releia enunciado/resposta da página e compare com o original

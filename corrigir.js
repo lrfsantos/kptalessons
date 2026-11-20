@@ -52,35 +52,6 @@ function collectionReturnsDir() {
   return CFG.RETURNS_DIR || path.join(CFG.LOTES_DIR, 'retornos-da-IA');
 }
 
-function coletaIncompleta(data) {
-  if (!data || !data.collection || !Array.isArray(data.collection.batches)) return false;
-  const returnsDir = collectionReturnsDir();
-  const missing = data.collection.batches.some(batch => {
-    const num = String(batch.num).padStart(2, '0');
-    return !fs.existsSync(path.join(returnsDir, 'lote-' + num + '.md')) &&
-      !fs.existsSync(path.join(CFG.LOTES_DIR, 'lote-' + num + '.devolvido.md'));
-  });
-  const hasOriginals = fs.existsSync(CFG.LOTES_DIR) &&
-    fs.readdirSync(CFG.LOTES_DIR).some(name => /^lote-\d{2,}\.md$/i.test(name));
-  return missing && hasOriginals;
-}
-
-function migrateLegacyReturns(collection) {
-  const returnsDir = collectionReturnsDir();
-  fs.mkdirSync(returnsDir, { recursive: true });
-  let moved = 0;
-  for (const batch of collection.batches || []) {
-    const num = String(batch.num).padStart(2, '0');
-    const oldFile = path.join(CFG.LOTES_DIR, 'lote-' + num + '.devolvido.md');
-    const newFile = path.join(returnsDir, 'lote-' + num + '.md');
-    if (fs.existsSync(oldFile) && !fs.existsSync(newFile)) {
-      fs.renameSync(oldFile, newFile);
-      moved++;
-    }
-  }
-  return moved;
-}
-
 const stableTracker = {
   state: new Map(),
   update(snapshot) {
@@ -136,8 +107,6 @@ module.exports = {
   refsFinalizadas,
   snapshotArquivos,
   stableTracker,
-  coletaIncompleta,
-  migrateLegacyReturns,
 };
 
 if (require.main === module) {

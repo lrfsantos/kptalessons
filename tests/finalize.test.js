@@ -2,6 +2,9 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const { isCorrected, finalize, fillCorrection, positiveCorrectionEvidence } = require('../lib/portal');
+const fs = require('fs');
+const path = require('path');
+const ler = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 
 // DOM falso: só responde ao que as funções consultam.
 function fakePage({ text = '', correctedBadge = false, finishButton = true, enabled = true, confirmOnClick = true }) {
@@ -161,3 +164,11 @@ test('C2: sequência completa com mocks — pendente → preencher → conferir 
   assert.equal(state.fbText, 'Good work!');
   assert.match(state.text, /Corrigida em:/);
 });
+
+test('breadcrumb esperado precisa ser lido; falha de leitura => revisão', () => {
+  const exec = ler('executor.js');
+  assert.match(exec, /if \(origL && origL\.breadcrumb\)/);
+  assert.match(exec, /!bc\.ok \|\| !bc\.title/);
+  assert.match(exec, /cabeçalho do portal não conferido/);
+});
+

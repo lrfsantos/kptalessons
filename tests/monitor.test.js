@@ -37,15 +37,18 @@ test('estabilidade: tamanho/data precisam permanecer iguais em verificações co
   assert.equal(w.stableTracker.update(s2).length, 1);
 });
 
-test('retomada: coleta incompleta preserva lotes (não inicia nova)', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cna-resume-'));
-  fs.writeFileSync(path.join(dir, 'lote-01.md'), 'conteudo');
-  const data = { collection: { nonce: 'abc', batches: [{ num: 1, name: 'lote-01.md', refs: ['A'] }] } };
-  const CFG = require('../lib/config');
-  const orig = CFG.LOTES_DIR;
-  CFG.LOTES_DIR = dir;
-  try { assert.equal(w.coletaIncompleta(data), true); }
-  finally { CFG.LOTES_DIR = orig; }
+test('política real: nova execução arquiva a anterior sem apagar documentos', () => {
+  const md = require('../lib/md');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cna-archive-'));
+  fs.writeFileSync(path.join(dir, 'lote-01.md'), 'conteudo do lote antigo');
+  fs.writeFileSync(path.join(dir, 'lote-01.devolvido.md'), 'retorno antigo');
+  const archive = md.archivePrevious(dir);
+  assert.ok(archive && fs.existsSync(archive), 'histórico criado');
+  const content = fs.readFileSync(archive, 'utf8');
+  assert.ok(content.includes('lote-01.md'), 'nome original preservado');
+  assert.ok(content.includes('conteudo do lote antigo'), 'conteúdo preservado');
+  assert.ok(content.includes('lote-01.devolvido.md'), 'retorno preservado');
+  assert.equal(fs.readdirSync(dir).filter(f => /^lote-\d+\.md$/.test(f)).length, 0, 'pasta ativa limpa');
 });
 
 test('monitoramento: não inicia com apenas parte dos lotes (validação usa inspectReturnedBatches)', () => {

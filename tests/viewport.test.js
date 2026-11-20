@@ -24,6 +24,22 @@ test('launch usa let para headless (sem reatribuir constante)', () => {
   assert.ok(!/const \{ headless = false/.test(code), 'headless precisa ser reatribuível');
 });
 
+test('launch respeita headless explícito false mesmo com CFG.HEADLESS=true', () => {
+  const code = fs.readFileSync(require.resolve('../lib/browser'), 'utf8');
+  assert.match(code, /hasOwnProperty\.call\(options, 'headless'\)/);
+  assert.doesNotMatch(code, /headless = headless \|\| CFG\.HEADLESS/);
+  // Comportamento simulado (sem abrir navegador):
+  const resolve = (opts, cfgHeadless) => {
+    let { headless = false } = opts;
+    if (!Object.prototype.hasOwnProperty.call(opts, 'headless')) headless = cfgHeadless;
+    return headless;
+  };
+  assert.equal(resolve({ headless: false }, true), false);
+  assert.equal(resolve({ headless: true }, false), true);
+  assert.equal(resolve({}, true), true);
+  assert.equal(resolve({}, false), false);
+});
+
 test('somente o Painel Local usa viewport: null', () => {
   const wizard = read('corrigir.js');
   assert.match(wizard, /launch\(\{\s*fresh:\s*true,\s*headless:\s*false,\s*viewport:\s*null\s*\}\)/);

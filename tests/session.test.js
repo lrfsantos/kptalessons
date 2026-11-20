@@ -70,13 +70,13 @@ test('9: limpeza não apaga dados de atividades/relatórios', () => {
   assert.ok(!/answers\.json|revisao\.md|report\.json|lotes/.test(code), 'session.js só mexe em %TEMP%');
 });
 
-test('10: sessão expirada interrompe e o login pode ser refeito sem perder progresso', () => {
+test('10: nova execução sempre faz login; progresso anterior é arquivado, não retomado', () => {
   const wizard = ler('../corrigir');
-  assert.match(wizard, /run\('login\.js'\)/, 'login pode ser repetido');
-  assert.match(wizard, /coletaIncompleta\(data\)/, 'progresso preservado');
+  assert.match(wizard, /run\('login\.js'\)/, 'login obrigatório em toda execução');
+  assert.ok(!/coletaIncompleta|migrateLegacyReturns/.test(wizard), 'sem funções de retomada mortas');
 });
 
-test('11: retomada não reaplica atividades já finalizadas', () => {
+test('11: atividades já finalizadas não são reaplicadas', () => {
   const exec = ler('../executor');
   assert.match(exec, /aplicadas = filled\.filter\(r => r\.finalized/);
   assert.match(exec, /JA_APLICADA/);
