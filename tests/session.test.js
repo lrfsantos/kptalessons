@@ -49,7 +49,7 @@ test('5: autenticação manual é detectada por evidência positiva no DOM', () 
 
 test('6: wizard faz login ANTES da coleta', () => {
   const code = ler('../corrigir');
-  assert.ok(code.indexOf("run('login.js')") < code.indexOf("run('scraper.js')"));
+  assert.ok(code.indexOf("run('login.js'") < code.indexOf("run('scraper.js'"));
 });
 
 test('7/8: limpeza remove só os próprios resíduos de execuções encerradas', () => {
@@ -72,7 +72,7 @@ test('9: limpeza não apaga dados de atividades/relatórios', () => {
 
 test('10: nova execução sempre faz login; progresso anterior é arquivado, não retomado', () => {
   const wizard = ler('../corrigir');
-  assert.match(wizard, /run\('login\.js'\)/, 'login obrigatório em toda execução');
+  assert.match(wizard, /run\('login\.js'/, 'login obrigatório em toda execução');
   assert.ok(!/coletaIncompleta|migrateLegacyReturns/.test(wizard), 'sem funções de retomada mortas');
 });
 

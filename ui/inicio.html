@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corretor CNA — Iniciando</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f5f7f8; --surface:#fff; --ink:#1b2b35; --muted:#5d6b76; --faint:#84919b;
+  --line:#dde4e8; --accent:#0f6157; --accent-soft:#e8f3f0;
+  --good:#17663f; --good-soft:#eaf5ee; --warn:#8a5a12; --warn-soft:#fff5e2; --bad:#9d3030; --bad-soft:#fdecec;
+  --radius:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.shell{max-width:min(880px,100%);margin:0 auto;padding:clamp(20px,4vh,48px) clamp(14px,3vw,32px) 56px}
+
+.masthead{display:flex;align-items:center;gap:13px;padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:28px}
+.mark{width:34px;height:34px;border-radius:9px;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:750;font-size:14px;letter-spacing:.04em;flex:none}
+.brand-name{font-weight:750;font-size:16px;letter-spacing:.08em}
+.brand-sub{color:var(--muted);font-size:13px;margin-top:1px}
+
+h1{font-size:clamp(21px,2.4vw,27px);line-height:1.25;margin:0 0 6px;letter-spacing:-.01em}
+.lead{color:var(--muted);margin:0 0 26px;max-width:640px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 1px 2px rgba(23,43,53,.05);padding:clamp(16px,2.4vw,24px)}
+.card h2{font-size:15px;margin:0 0 18px}
+
+.steps{list-style:none;margin:0;padding:0}
+.steps li{display:flex;align-items:center;gap:13px;padding:10px 0;border-bottom:1px solid #eef2f4}
+.steps li:last-child{border-bottom:0}
+.dot{width:22px;height:22px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:12px;font-weight:700;border:2px solid var(--line);background:#f3f6f7;color:var(--faint)}
+.steps li.done .dot{background:var(--good-soft);border-color:#cfe8d8;color:var(--good)}
+.steps li.active .dot{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 0 0 4px var(--accent-soft)}
+.step-label{font-weight:600}
+.step-note{font-size:12px;color:var(--faint);margin-left:auto;text-align:right}
+.steps li.active .step-note{color:var(--accent);font-weight:600}
+
+.spinner{width:15px;height:15px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.progress-wrap{margin-top:22px}
+.progress{height:7px;background:#e8edf0;border-radius:999px;overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .35s}
+.progress-label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:8px}
+
+.log{background:#fbfcfd;border:1px solid var(--line);border-radius:8px;margin-top:22px;padding:12px 14px;max-height:220px;overflow:auto;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace;color:#42525d;white-space:pre-wrap;overflow-wrap:anywhere}
+.log:empty{display:none}
+
+.notice{border-radius:8px;padding:13px 15px;margin-top:18px;font-size:14px;border:1px solid transparent;display:none}
+.notice.show{display:block}
+.notice.good{background:var(--good-soft);color:var(--good);border-color:#cfe8d8}
+.notice.bad{background:var(--bad-soft);color:var(--bad);border-color:#efcbcb}
+
+footer{margin-top:22px;color:var(--faint);font-size:12px}
+@media (max-width:620px){
+  .masthead{flex-wrap:wrap}
+  .step-note{display:none}
+  .log{max-height:160px}
+}
+@media (prefers-reduced-motion:reduce){.spinner{animation:none}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="masthead">
+    <div class="mark">CNA</div>
+    <div>
+      <div class="brand-name">CORRETOR CNA</div>
+      <div class="brand-sub">Preparando sua correção</div>
+    </div>
+  </header>
+
+  <h1 id="title">Iniciando…</h1>
+  <p class="lead" id="lead">Estamos preparando o navegador e o portal. Quando chegar a hora, faça login na janela do Chromium que aparecer — você não precisa digitar nada aqui.</p>
+
+  <section class="card">
+    <h2>Etapas</h2>
+    <ol class="steps" id="steps"></ol>
+    <div class="progress-wrap">
+      <div class="progress"><i id="bar"></i></div>
+      <div class="progress-label"><span id="stageLabel">Preparando…</span><span id="pct">0%</span></div>
+    </div>
+    <div class="log" id="log" aria-live="polite"></div>
+    <div class="notice good" id="ok">Tudo pronto. Abrindo o painel de correção…</div>
+    <div class="notice bad" id="err"></div>
+  </section>
+
+  <footer>Este programa funciona somente neste computador. Seus dados de login são temporários e descartados ao encerrar.</footer>
+</div>
+
+<script>
+const base = location.pathname.replace(/\/$/, '');
+const $ = id => document.getElementById(id);
+const LABELS = {
+  preflight: 'Verificando os componentes do programa',
+  login: 'Aguardando login no portal CNA',
+  collect: 'Coletando suas atividades pendentes',
+  panel: 'Pronto para corrigir com a IA',
+  apply: 'Aplicando as correções no portal',
+  done: 'Processamento concluído',
+};
+let redirected = false;
+
+function render(s) {
+  // etapas
+  $('steps').replaceChildren();
+  (s.steps || []).forEach(st => {
+    const li = document.createElement('li');
+    li.className = st.state;
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.textContent = st.state === 'done' ? '✓' : st.state === 'active' ? '' : '';
+    if (st.state === 'active') {
+      const sp = document.createElement('span');
+      sp.className = 'spinner';
+      dot.replaceChildren(sp);
+    }
+    const label = document.createElement('span');
+    label.className = 'step-label';
+    label.textContent = st.label;
+    const note = document.createElement('span');
+    note.className = 'step-note';
+    note.textContent = st.state === 'done' ? 'concluído' : st.state === 'active' ? (LABELS[st.id] || 'em andamento') : '';
+    li.append(dot, label, note);
+    $('steps').append(li);
+  });
+
+  const idx = (s.steps || []).findIndex(x => x.state === 'active');
+  const done = (s.steps || []).filter(x => x.state === 'done').length;
+  const total = (s.steps || []).length || 1;
+  const pct = s.status === 'done' ? 100 : Math.round((done / total) * 100);
+  $('bar').style.width = pct + '%';
+  $('pct').textContent = pct + '%';
+  $('stageLabel').textContent = LABELS[s.current] || 'Preparando…';
+  $('title').textContent = s.status === 'error' ? 'Não foi possível continuar'
+    : s.status === 'done' ? 'Tudo pronto' : 'Iniciando…';
+
+  const log = (s.logs || []).join('\n');
+  if ($('log').textContent !== log) { $('log').textContent = log; $('log').scrollTop = $('log').scrollHeight; }
+
+  $('ok').classList.toggle('show', s.status === 'done');
+  const err = $('err');
+  err.classList.toggle('show', s.status === 'error');
+  if (s.status === 'error') {
+    const last = (s.logs || []).slice(-3).join(' ');
+    err.textContent = 'Ocorreu um problema. Veja a mensagem acima. ' + last;
+  }
+
+  if (s.panelUrl && !redirected) {
+    redirected = true;
+    setTimeout(() => { location.href = s.panelUrl; }, 900);
+  }
+}
+
+async function poll() {
+  try {
+    const r = await fetch(base + '/api/state', { cache: 'no-store' });
+    if (r.ok) render(await r.json());
+  } catch (e) {
+    $('err').classList.add('show');
+    $('err').textContent = 'Conexão com o programa perdida: ' + e.message;
+  }
+}
+poll();
+setInterval(poll, 1200);
+</script>
+</body>
+</html>

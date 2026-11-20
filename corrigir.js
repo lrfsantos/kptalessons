@@ -10,6 +10,7 @@ const CFG = require('./lib/config');
 const session = require('./lib/session');
 const { createPanel } = require('./lib/panel');
 const { launch } = require('./lib/browser');
+const { createStartupServer } = require('./lib/startup');
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -28,15 +29,28 @@ function snapshotArquivos(dir, names) {
   return out;
 }
 
-function run(script) {
+// Executa um script filho e espelha sua saída no console E na interface web.
+// `stdio: pipe` (em vez de inherit) é o que permite enviar o progresso à página.
+function run(script, ui) {
   return new Promise(resolve => {
     const child = spawn(process.execPath, [script], {
-      stdio: 'inherit',
+      stdio: ['ignore', 'pipe', 'pipe'],
       cwd: CFG.ROOT,
       env: process.env,
     });
+    const forward = chunk => {
+      for (const line of String(chunk).split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        process.stdout.write(line + '\n');
+        if (ui) ui.log(line);
+      }
+    };
+    child.stdout.on('data', forward);
+    child.stderr.on('data', forward);
     child.once('error', error => {
-      console.error('Não foi possível iniciar ' + script + ': ' + error.message);
+      const msg = 'Não foi possível iniciar ' + script + ': ' + error.message;
+      console.error(msg);
+      if (ui) ui.log(msg);
       resolve(false);
     });
     child.once('close', code => resolve(code === 0));
@@ -67,38 +81,41 @@ const stableTracker = {
   },
 };
 
-async function runPanel(collection) {
+async function runPanel(collection, uiPage, uiBrowser, ui) {
   const panel = await createPanel({
     collection,
     lotesDir: CFG.LOTES_DIR,
     returnsDir: collectionReturnsDir(),
   });
-  let panelBrowser = null;
+  const onDisconnected = () => {
+    if (!panel.getState().done) panel.abort('A janela do Painel Local foi fechada antes de todos os retornos serem recebidos.');
+  };
+  uiBrowser.on('disconnected', onDisconnected);
   try {
-    const opened = await launch({ fresh: true, headless: false, viewport: null });
-    panelBrowser = opened.browser;
-    panelBrowser.on('disconnected', () => {
-      if (!panel.getState().done) panel.abort('A janela do Painel Local foi fechada antes de todos os retornos serem recebidos.');
-    });
-    await opened.page.goto(panel.url, { waitUntil: 'domcontentloaded', timeout: CFG.NAV_TIMEOUT });
+    ui.setStep('panel');
+    ui.readyForPanel(panel.url);
+    // Breve pausa para a interface mostrar "Tudo pronto" antes de trocar de página.
+    await sleep(900);
+    await uiPage.goto(panel.url, { waitUntil: 'domcontentloaded', timeout: CFG.NAV_TIMEOUT });
+    await uiPage.close(); // a aba da interface não é mais necessária
     console.log('\nPainel local aberto no Chromium.');
     console.log('Copie um lote ou todos, envie à IA e cole a resposta no painel.');
     console.log('O retorno pode conter um ou vários lotes. Não é necessário salvar ou renomear arquivos.\n');
 
     await panel.waitForComplete();
     panel.setPhase('applying');
+    ui.setStep('apply');
     console.log('\nTodos os retornos foram recebidos e validados estruturalmente.');
     console.log('Iniciando aplicação no portal CNA...\n');
 
-    const ok = await run('executor.js');
+    const ok = await run('executor.js', ui);
     panel.setPhase(ok ? 'done' : 'error');
-    if (!ok) process.exitCode = 1;
+    ui.setStep(ok ? 'done' : 'panel');
+    if (!ok) { ui.fail('A aplicação encontrou problemas. Reveja revisao.md.'); process.exitCode = 1; }
     await sleep(4500);
     return ok;
   } finally {
-    if (panelBrowser) {
-      try { await panelBrowser.close(); } catch { /* navegador já encerrado */ }
-    }
+    uiBrowser.off('disconnected', onDisconnected);
     await panel.close();
   }
 }
@@ -111,21 +128,35 @@ module.exports = {
 
 if (require.main === module) {
   (async () => {
-    console.log('CORRETOR CNA');
-    console.log('============\n');
     session.cleanupStale();
     session.newSessionFile();
 
+    // Interface web de progresso: sobe ANTES de qualquer etapa e abre no Chromium.
+    const ui = await createStartupServer();
+    let uiBrowser = null;
+    ui.log('CORRETOR CNA — iniciando.');
+    ui.setStep('preflight');
+
     try {
+      const opened = await launch({ fresh: true, headless: false, viewport: null });
+      uiBrowser = opened.browser;
+      const uiPage = opened.page;
+      await uiPage.goto(ui.url, { waitUntil: 'domcontentloaded', timeout: CFG.NAV_TIMEOUT });
+      console.log('Interface aberta: ' + ui.url);
       console.log('Abrindo um navegador novo. Faça login manualmente no CNA.\n');
-      if (!await run('login.js')) {
+
+      ui.setStep('login');
+      if (!await run('login.js', ui)) {
+        ui.fail('Login não concluído. Nada foi coletado.');
         console.error('\nLogin não concluído. Nada foi coletado.');
         process.exitCode = 1;
         return;
       }
 
-      console.log('\nIniciando uma coleta nova para a conta autenticada nesta execução...');
-      if (!await run('scraper.js')) {
+      ui.setStep('collect');
+      console.log('Iniciando uma coleta nova para a conta autenticada nesta execução...');
+      if (!await run('scraper.js', ui)) {
+        ui.fail('Não foi possível coletar as atividades.');
         console.error('\nNão foi possível coletar as atividades.');
         process.exitCode = 1;
         return;
@@ -133,6 +164,7 @@ if (require.main === module) {
       const data = readAnswers();
 
       if (!data || !data.collection) {
+        ui.fail('Nenhuma pendência encontrada. Nada a corrigir.');
         console.log('\nNenhuma pendência encontrada. Nada a corrigir.');
         return;
       }
@@ -140,11 +172,14 @@ if (require.main === module) {
       const total = (data.collection.batches || []).reduce(
         (sum, batch) => sum + Number(batch.total || (batch.refs || []).length), 0
       );
+      ui.log('Coleta pronta: ' + total + ' atividades em ' + data.collection.batches.length + ' lotes.');
       console.log('Coleta pronta: ' + total + ' atividades em ' + data.collection.batches.length + ' lotes.');
-      await runPanel(data.collection);
+      await runPanel(data.collection, uiPage, uiBrowser, ui);
       console.log('\nProcessamento encerrado. Consulte report.json e revisao.md.');
     } finally {
       session.cleanup();
+      if (uiBrowser) { try { await uiBrowser.close(); } catch { /* já encerrado */ } }
+      await ui.close();
     }
   })().catch(error => {
     try { session.cleanup(); } catch { /* best effort */ }
