@@ -7,9 +7,6 @@ title CORRETOR CNA
 echo CORRETOR CNA
 echo ============
 echo.
-echo Inicializando...
-echo Verificando componentes locais...
-echo.
 
 rem Caminhos locais: nada e instalado, nada e baixado.
 set "PATH=%~dp0runtime\node;%PATH%"
@@ -18,13 +15,24 @@ set "BROWSER=chromium"
 
 if not exist "%~dp0runtime\node\node.exe" goto falha_node
 if not exist "%~dp0node_modules\playwright-core" goto falha_deps
-if not exist "%~dp0runtime\ms-playwright\chromium-1255" goto falha_chromium
 
-echo Node.js portatil: OK
-echo Playwright: OK
-echo Chromium portatil: OK
+rem Carrega .env quando existir (sem dependencias externas).
+if not exist "%~dp0.env" goto sem_env
+for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%~dp0.env") do (
+  if not "%%A"=="" set "%%A=%%B"
+)
+:sem_env
+
+echo Verificando componentes locais...
+"%~dp0runtime\node\node.exe" preflight.js
+if errorlevel 1 (
+  echo.
+  echo ERRO: pre-flight falhou. Veja as mensagens acima.
+  echo A janela permanece aberta para voce ler.
+  pause
+  exit /b 1
+)
 echo.
-"%~dp0runtime\node\node.exe" --version >nul 2>&1 || goto falha_node
 
 call "%~dp0runtime\node\node.exe" corrigir.js
 set "EXITCODE=%ERRORLEVEL%"
@@ -42,12 +50,6 @@ exit /b 1
 
 :falha_deps
 echo ERRO: dependencias ausentes em node_modules\.
-echo A pasta de distribuicao esta incompleta. Nao tente instalar nada.
-pause
-exit /b 1
-
-:falha_chromium
-echo ERRO: Chromium portatil ausente em runtime\ms-playwright\.
 echo A pasta de distribuicao esta incompleta. Nao tente instalar nada.
 pause
 exit /b 1
