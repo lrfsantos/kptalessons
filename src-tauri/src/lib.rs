@@ -68,10 +68,10 @@ fn repo_base() -> PathBuf {
             .expect("src-tauri sem pai")
             .to_path_buf()
     } else {
-        // ProduÃ§Ã£o: recursos ficam na raiz dos recursos empacotados.
+        // Producao: recursos ficam em <exe>\resources (layout padrao do Tauri).
         std::env::current_exe()
             .ok()
-            .and_then(|p| p.parent().map(Path::to_path_buf))
+            .and_then(|p| p.parent().map(|d| d.join("resources")))
             .unwrap_or_else(|| PathBuf::from("."))
     }
 }
