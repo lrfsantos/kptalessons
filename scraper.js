@@ -175,7 +175,6 @@ function archivePreviousRun() {
     // 4. Gera os lotes MD (nonce novo + INJECT em cada lote) e salva a
     //    identidade da coleta junto com os dados estruturados (T12).
     const { nonce, files, total } = md.buildBatches(classes, { loteSize });
-    const generatedAt = new Date().toISOString();
     const collection = {
       id: generatedAt,
       nonce,
