@@ -29,6 +29,8 @@
   - retorno inválido (nonce errado) → **HTTP 422**, mensagem humana exibida
   - retorno válido → **HTTP 200**: `accepted: [{num:1, activities:10}]`, `done: true`, tela "Demonstração concluída — 1 lote aceito, 0 rejeitados"
   - `verificacao-estrutural` → 1 página no contexto; processos: `msedgewebview2` (runtime interno), **0** chrome/chromium/msedge
+- **E2E no PRODUTO INSTALADO** (NSIS, aberto pelo atalho do Menu Iniciar; evidências em `%TEMP%\cna-poc-evidencias-1795212847283`): mesmo fluxo completo em ~5 s — sidecar invisível, portal na mesma janela, 422 no inválido, 200 no válido, `done: true`, 0 navegadores externos. Correção prévia necessária: recursos resolvidos em `<exe>\resources\` (`40ad106`).
+- **Prova de rede do CDP (netstat)**: `TCP 127.0.0.1:62867 LISTENING` — endpoint de depuração vinculado exclusivamente ao loopback; conexões do painel também só em `127.0.0.1`
 - **CI:** run #19 — todos os jobs `success` (matriz Node 22/24 em Ubuntu/Windows + `tauri-poc`), em `6986f48`
 - **Testes locais:** `tests/poc/` — 5 pass, 1 skip (teste CDP requer app rodando); parser real valida/rejeita os 4 cenários de fixture
 - Screenshots (02-portal, 04-painel, 05-inválido, 06-válido, 07-conclusão) na pasta de evidências, sem dados pessoais
