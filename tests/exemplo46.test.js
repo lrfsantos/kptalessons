@@ -56,7 +56,9 @@ test('exemplo sanitizado: nonce e referências fictícias; nenhum dado real', ()
   const entries = md.parseReturned(devolvidos);
   assert.ok(entries.every(e => /^C000001 S00000[1-8] /.test(e.ref)), 'refs fictícias');
   const tudo = gerados.join('') + devolvidos.join('');
-  assert.ok(!/S000003|S000004|S000005|S000006|C000003|f0f0f0f0f0f0/.test(tudo), 'sem refs/nonce reais da run');
+  // Todas as refs devem pertencer à família sintética (C00000x / S00000x).
+  const refs = [...tudo.matchAll(/\b[CS]\d{6}\b/g)].map(m => m[0]);
+  assert.ok(refs.length > 0 && refs.every(r => /^[CS]00000\d$/.test(r)), 'refs sintéticas');
   const blocos = tudo.split('\n').filter(l => /^## Turma:|^### Aluno:/.test(l)).join('\n');
   assert.ok(!/Mococa|CNA Mococa/.test(blocos), 'sem nome de unidade real nos cabeçalhos');
   assert.ok(!/[\w.+-]+@[\w-]+\.[\w-]+/.test(tudo), 'sem e-mails');

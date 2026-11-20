@@ -52,11 +52,11 @@ verificações continua exigindo atenção.
 5. **Aplicação:** quando todos os lotes forem recebidos, o executor relê cada atividade no portal, valida os dados, seleciona CORRETO/PARCIAL/INCORRETO, preenche o feedback, clica em Finalizar e só registra `appliedRefs` depois da confirmação real do portal.
 6. **Revisão:** entradas suspeitas, inválidas ou divergentes não são preenchidas nem finalizadas; aparecem em `revisao.md`.
 
-A pasta `lotes/retornos-da-IA/` é usada internamente para guardar os retornos validados durante a execução e permitir retomada. O professor não precisa abri-la nem gerenciar seus arquivos.
+A pasta `lotes/retornos-da-IA/` é usada internamente para guardar os retornos validados durante a execução. O professor não precisa abri-la nem gerenciar seus arquivos.
 
 ## Como rodar
 
-Na distribuição portátil, Node.js, Playwright e Chromium vêm dentro da própria pasta. Para desenvolvimento, use Node.js ≥ 18.
+Na distribuição portátil, Node.js, Playwright e Chromium vêm dentro da própria pasta. Para desenvolvimento, use **Node.js ≥ 20** (o `playwright-core` atual exige essa versão). O `Corrigir.cmd` executa um `preflight.js` que valida Node, Playwright e o Chromium portátil antes de iniciar.
 
 ```bash
 npm install          # instala playwright-core
@@ -197,7 +197,7 @@ ultrapassar 10. Cada lote tem no máximo 10 atividades e contém INJECT + nonce 
 
 Cada coleta gera um **nonce novo** e grava em `answers.json` a identidade da rodada: nonce, número de cada lote e refs esperadas. O painel não depende de nomes de arquivo: identifica cada atividade pela ref e verifica o nonce, os marcadores, a classificação, o score, a flag, a revisão e o feedback. Refs ausentes, estranhas ou duplicadas são rejeitadas; um lote só é aceito quando todas as atividades dele estão completas. `appliedRefs` só é atualizado após a confirmação de finalização no portal.
 
-A cada nova execução, os resultados locais da execução anterior são arquivados antes da coleta, evitando misturar dados de professores diferentes. Os originais e retornos anteriores ficam em histórico local.
+A cada nova execução, após login manual, os resultados locais da execução anterior são **arquivados** antes da coleta (sem apagar), evitando misturar dados de professores diferentes. **Não há retomada automática entre contas:** o login manual em cada execução impede reutilizar a sessão de outro professor.
 
 ### Alguma nota pode ser lançada sem o professor revisar? Como funciona a etapa antes do Finalizar?
 
