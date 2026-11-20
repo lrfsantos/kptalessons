@@ -44,10 +44,11 @@
     <footer class="rodape">Corretor CNA · prova de conceito em janela única</footer>
   </div>
   <script>
-    // A demonstração e conduzida pelo proprio aplicativo (janela unica).
+    // Modo interativo: voce inicia; o portal abre NESTA janela para verificação.
     document.getElementById('iniciar').addEventListener('click', function () {
-      this.textContent = 'Demonstração em andamento…';
       this.disabled = true;
+      this.textContent = 'Abrindo o portal…';
+      window.location.href = 'https://app.cna.com.br/login';
     });
   </script>
 </body>

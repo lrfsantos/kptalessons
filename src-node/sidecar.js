@@ -24,6 +24,8 @@ const md = require(path.join(BASE, 'lib', 'md.js'));
 const { writeFixture, makeValidReturn } = require('./fixture.js');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Tempo que o sidecar espera cada acao do usuario antes de encerrar a observacao.
+const ESPERA_USUARIO = 15 * 60 * 1000;
 
 const stamp = Date.now();
 const EVIDENCE_DIR = path.join(os.tmpdir(), `cna-poc-evidencias-${stamp}`);
@@ -119,77 +121,115 @@ async function rodarDemo(demoPort) {
     log('resposta-submit', { status: r.status(), corpo });
   });
 
-  // 1. Identidade da pagina inicial (deve ser a pagina local do app Tauri).
-  const identidade = { url: page.url(), titulo: await page.title().catch(() => '') };
-  log('pagina-inicial', identidade);
-
-  // 2. Portal CNA na MESMA janela, sem login.
-  await page.goto('https://app.cna.com.br/login', { waitUntil: 'domcontentloaded', timeout: 90000 });
+  // 1. Modo interativo: aguarda o usuario clicar em "Iniciar correção",
+  //    o que navega ESTA janela ao portal CNA (so verificacao, sem login).
+  log('aguardando-usuario', { acao: 'clicar em Iniciar correção' });
+  await page.waitForURL('https://app.cna.com.br/**', { timeout: ESPERA_USUARIO }).catch(() => {});
+  if (!page.url().startsWith('https://app.cna.com.br')) {
+    log('demo-abandonada', { etapa: 'portal', url: page.url() });
+    return;
+  }
   await page.waitForTimeout(2500);
-  const portal = { url: page.url(), titulo: await page.title().catch(() => '') };
-  const semLogin = !(await page.locator('input[type=password]').count());
-  log('portal-aberto-mesma-janela', { ...portal, campoSenhaPresente: !semLogin });
+
+  // 2. Barra do app sobre o portal: usuario decide quando "voltar".
+  await page.evaluate(destino => {
+    const bar = document.createElement('div');
+    bar.id = 'cna-poc-barra';
+    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#0F6157;color:#fff;' +
+      'padding:10px 16px;font:14px/1.4 system-ui,Segoe UI,sans-serif;display:flex;gap:12px;align-items:center;justify-content:space-between';
+    const texto = document.createElement('span');
+    texto.textContent = 'Prova de conceito Corretor CNA — o login aqui é só para verificação. Nenhum dado é enviado.';
+    const btn = document.createElement('button');
+    btn.textContent = 'Voltar ao Corretor (simulado)';
+    btn.type = 'button';
+    btn.style.cssText = 'background:#fff;color:#0F6157;border:0;border-radius:6px;padding:8px 14px;font-weight:600;cursor:pointer';
+    btn.addEventListener('click', () => { window.location.href = destino; });
+    bar.appendChild(texto);
+    bar.appendChild(btn);
+    document.documentElement.appendChild(bar);
+    const st = document.createElement('style');
+    st.textContent = 'body{margin-top:52px !important}';
+    document.head.appendChild(st);
+  }, demoBase + '/progresso');
+  log('portal-aberto-mesma-janela', {
+    url: page.url(),
+    titulo: await page.title().catch(() => ''),
+    campoSenhaPresente: Boolean(await page.locator('input[type=password]').count()),
+  });
   await shot(page, '02-portal-login');
 
-  // 3. Retorno ao aplicativo (progresso simulado).
-  await page.goto(demoBase + '/progresso', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(600);
-  log('retorno-app-progresso', { url: page.url() });
+  // 3. Aguarda o usuario clicar em "Voltar ao Corretor (simulado)".
+  log('aguardando-usuario', { acao: 'clicar em Voltar ao Corretor (simulado)' });
+  await page.waitForURL(demoBase + '/progresso', { timeout: ESPERA_USUARIO }).catch(() => {});
+  if (!page.url().startsWith(demoBase)) {
+    log('demo-abandonada', { etapa: 'retorno', url: page.url() });
+    return;
+  }
   await shot(page, '03-progresso');
 
-  // 4. Painel real com lote sintetico.
+  // 4. Aguarda o usuario clicar em "Continuar para o painel".
+  log('aguardando-usuario', { acao: 'clicar em Continuar para o painel' });
+  await page.waitForFunction('window.__cna_prosseguir === true', { timeout: ESPERA_USUARIO }).catch(() => {});
+  if (!page.evaluate(() => window.__cna_prosseguir === true)) {
+    log('demo-abandonada', { etapa: 'progresso', url: page.url() });
+    return;
+  }
   await page.goto(panel.url, { waitUntil: 'domcontentloaded' });
+
+  // 5. Painel REAL: instrucoes + exemplos coláveis; o usuario testa com as
+  //    proprias maos (copiar, colar, validar) e o parser real decide.
   await page.locator('#answer').waitFor({ state: 'visible', timeout: 30000 });
+  const valido = makeValidReturn();
+  const invalido = makeValidReturn({ wrongNonce: true });
+  await page.evaluate(({ invalido, valido }) => {
+    const aviso = document.createElement('div');
+    aviso.style.cssText = 'position:sticky;top:0;z-index:9999;background:#FFF4DE;border:1px solid #DEE5E8;border-radius:8px;' +
+      'padding:12px 16px;margin:12px;font:14px/1.5 system-ui,Segoe UI,sans-serif;color:#172B35';
+    aviso.innerHTML = '<strong>Prova de conceito — dados fictícios.</strong> Experimente o ciclo real copiar → colar → validar:' +
+      '<br>1. Clique nos botões de copiar do painel e cole num editor para ver o lote.' +
+      '<br>2. Use um dos botões abaixo para colocar um retorno de exemplo no campo de resposta.' +
+      '<br>3. Clique em <em>Validar</em> e veja o parser real aceitar ou rejeitar — erros aparecem com mensagem humana.';
+    const mk = (rotulo, texto, cor) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = rotulo;
+      b.style.cssText = `margin:8px 8px 0 0;padding:8px 14px;border:0;border-radius:6px;cursor:pointer;font-weight:600;background:${cor};color:#fff`;
+      b.addEventListener('click', () => {
+        const ta = document.getElementById('answer');
+        ta.value = texto;
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        ta.scrollIntoView({ block: 'center' });
+      });
+      return b;
+    };
+    aviso.appendChild(mk('Colar exemplo com ERRO', invalido, '#B3462E'));
+    aviso.appendChild(mk('Colar exemplo VÁLIDO', valido, '#0F6157'));
+    document.body.prepend(aviso);
+  }, { invalido, valido });
   const painelInfo = await page.evaluate(() => ({
-    titulo: document.title,
     total: document.getElementById('total').textContent.trim(),
-    recebidas: document.getElementById('received').textContent.trim(),
-    lotes: document.querySelectorAll('#batches .batch, #batches li, #batches > *').length,
     botaoCopiar: Boolean(document.getElementById('copyAll')),
     textarea: Boolean(document.getElementById('answer')),
   }));
-  const conteudoLote = await (await fetch(panel.url + 'api/batch/1')).json();
-  log('painel-carregado', {
-    ...painelInfo,
-    loteBytes: (conteudoLote.content || '').length,
-    nonceNaPagina: (conteudoLote.content || '').includes(fixture.collection.nonce),
-  });
+  log('painel-carregado', painelInfo);
   await shot(page, '04-painel-lote');
 
-  // 5. Retorno INVALIDO (nonce errado) deve ser rejeitado pelo parser real.
-  const invalido = makeValidReturn({ wrongNonce: true });
-  await page.fill('#answer', invalido);
-  await page.click('#submit');
-  await page.waitForFunction(() => {
-    const el = document.getElementById('result');
-    return el && !el.classList.contains('hidden') && el.textContent.trim().length > 0;
-  }, { timeout: 30000 }).catch(() => {});
-  const aposInvalido = await page.evaluate(() => {
-    const el = document.getElementById('result');
-    return { visivel: !el.classList.contains('hidden'), texto: el.textContent.trim().slice(0, 160) };
-  });
-  const estadoAposInvalido = await estado(panel.url + 'api/state');
-  log('retorno-invalido-rejeitado', {
-    mensagem: aposInvalido.texto,
-    recebidas: estadoAposInvalido.receivedActivities,
-  });
-  await shot(page, '05-retorno-invalido');
-
-  // 6. Retorno VALIDO aceito pelo parser real.
-  const valido = makeValidReturn();
-  await page.fill('#answer', valido);
-  await page.click('#submit');
-  await page.waitForFunction(() => {
-    const el = document.getElementById('complete');
-    return el && !el.classList.contains('hidden');
-  }, { timeout: 30000 }).catch(() => {});
-  const estadoFinal = await estado(panel.url + 'api/state');
-  const completoVisivel = await page.evaluate(() => {
-    const el = document.getElementById('complete');
-    return Boolean(el && !el.classList.contains('hidden'));
-  });
+  // 6. Observa o usuario testar; termina quando o lote valido for aceito.
+  log('aguardando-usuario', { acao: 'validar os retornos no painel' });
+  const inicio = Date.now();
+  let estadoFinal = null;
+  while (Date.now() - inicio < ESPERA_USUARIO) {
+    await sleep(2000);
+    try {
+      const s = await estado(panel.url + 'api/state');
+      if (s.done) { estadoFinal = s; break; }
+    } catch { /* servidor ocupado; tenta de novo */ }
+  }
+  if (!estadoFinal) {
+    log('demo-abandonada', { etapa: 'painel', url: page.url() });
+    return;
+  }
   log('retorno-valido-aceito', {
-    completoVisivel,
     recebidas: estadoFinal.receivedActivities,
     lotesRecebidos: estadoFinal.receivedBatches,
     total: estadoFinal.totalActivities,

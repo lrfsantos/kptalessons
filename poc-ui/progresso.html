@@ -31,10 +31,17 @@
           <li class="ativa"><span class="etapa-icone" aria-hidden="true"></span>Localizando atividades pendentes</li>
           <li><span class="etapa-icone" aria-hidden="true"></span>Preparando os lotes para correção</li>
         </ul>
+        <button class="botao primario" type="button" id="continuar" style="margin-top:24px">Continuar para o painel</button>
       </section>
     </main>
 
     <footer class="rodape">Corretor CNA · demonstração com dados fictícios</footer>
   </div>
+  <script>
+    // Modo interativo: sinaliza ao sidecar quando voce quer ir ao painel.
+    document.getElementById('continuar').addEventListener('click', function () {
+      window.__cna_prosseguir = true;
+    });
+  </script>
 </body>
 </html>
