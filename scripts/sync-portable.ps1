@@ -21,10 +21,18 @@ Copy-Item $dest $backup -Recurse -Force
 if (-not (Test-Path (Join-Path $backup 'Corrigir.cmd'))) { throw 'Falha no backup.' }
 Write-Output "Backup criado: $backup"
 
-# 2) Copia SOMENTE arquivos rastreados pelo Git, exceto dados locais
-$tracked = & git -C $repo ls-files
+# 2) Copia arquivos rastreados + arquivos de distribuição (não versionados)
+$tracked = @(& git -C $repo ls-files)
+# Arquivos de distribuição são versionados em distribuicao/ e copiados para a raiz.
+$distFiles = @('Corrigir.cmd', 'preflight.js')
 $skipPrefixes = @('lotes/', 'answers.json', 'report.json', 'revisao.md', 'relatorio-ia.md')
 $copied = @()
+foreach ($name in $distFiles) {
+  $srcFile = Join-Path $repo ('distribuicao\' + $name)
+  if (-not (Test-Path $srcFile)) { throw "Arquivo de distribuição ausente no repo: $srcFile" }
+  Copy-Item $srcFile (Join-Path $dest $name) -Force
+  $copied += $name
+}
 foreach ($rel in $tracked) {
   $skip = $false
   foreach ($pre in $skipPrefixes) { if ($rel -eq $pre -or $rel.StartsWith($pre)) { $skip = $true; break } }
