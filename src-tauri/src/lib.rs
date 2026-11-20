@@ -133,7 +133,15 @@ fn shutdown_sidecar(state: &State<'_, SidecarState>) {
         let _ = child.kill();
         let _ = child.wait();
     }
-    let _ = fs::remove_dir_all(&state.profile_dir);
+    // Os processos internos do WebView2 desligam de forma assincrona; a pasta
+    // pode permanecer travada por alguns instantes. Tenta algumas vezes antes
+    // de desistir (a inicializacao seguinte tambem remove residuos).
+    for _ in 0..6 {
+        if fs::remove_dir_all(&state.profile_dir).is_ok() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(400));
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
