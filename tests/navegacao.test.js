@@ -4,6 +4,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { irPara } = require('../src-node/navegacao');
+const { MENSAGENS_ERRO } = require('../src-node/eventos');
 
 function pageQueFalha(erro) {
   return { goto: async () => { throw erro; } };
@@ -27,20 +28,27 @@ test('falha ao navegar para o painel: estado estruturado, sem conversão em suce
   assert.equal(eventos.length, 1);
   assert.equal(eventos[0].event, 'NAVEGACAO_FALHOU');
   assert.equal(eventos[0].detail.destino, 'painel');
-  assert.ok(eventos[0].detail.mensagem.includes('CONNECTION_REFUSED'));
+  // Rodada 4: texto bruto sai; entra código fechado + mensagem da interface.
+  assert.equal(eventos[0].detail.codigo, 'ERRO_REDE');
+  assert.ok(!eventos[0].detail.mensagem.includes('CONNECTION_REFUSED'), 'texto bruto da exceção não vaza');
+  assert.ok(Object.values(MENSAGENS_ERRO).includes(eventos[0].detail.mensagem));
 });
 
-test('falha ao navegar para conclusão: destino estruturado com mensagem sanitizada', async () => {
+test('falha ao navegar para conclusão: código fechado, nome/e-mail/resposta nunca saem', async () => {
   const eventos = [];
   const ok = await irPara(
-    pageQueFalha(new Error('Timeout 30000ms excedido para ana@exemplo.com')),
+    pageQueFalha(new Error('Timeout 30000ms excedido para Ana Silva, resposta: "texto do aluno" e ana@exemplo.com')),
     'conclusao', 'http://127.0.0.1:3/conclusao',
     (event, detail) => eventos.push({ event, detail })
   );
   assert.equal(ok, false);
   assert.equal(eventos[0].detail.destino, 'conclusao');
-  assert.ok(!eventos[0].detail.mensagem.includes('ana@exemplo.com'), 'e-mail redigido');
-  assert.ok(eventos[0].detail.mensagem.includes('[EMAIL]'));
+  assert.equal(eventos[0].detail.codigo, 'ERRO_TEMPO_ESGOTADO');
+  const linha = JSON.stringify(eventos[0]);
+  for (const proibido of ['Ana Silva', 'ana@exemplo.com', 'texto do aluno', 'Timeout 30000ms']) {
+    assert.ok(!linha.includes(proibido), `texto bruto vazado: ${proibido}`);
+  }
+  assert.ok(Object.values(MENSAGENS_ERRO).includes(eventos[0].detail.mensagem), 'mensagem definida pela interface');
 });
 
 test('falha ao navegar para o portal: mesmo contrato estruturado', async () => {

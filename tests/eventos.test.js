@@ -5,6 +5,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   sanitizarEvento, sanitizarExcecao, sanitizarTexto, EVENTOS, CAMPOS,
+  CODIGOS_ERRO, MENSAGENS_ERRO,
 } = require('../src-node/eventos');
 
 const SENSIVEL = {
@@ -62,20 +63,43 @@ test('números passam; objetos não são encaminhados de forma alguma', () => {
   assert.deepEqual(e.detail, { finalizadas: 7, revisao: 2 });
 });
 
-test('sanitizarExcecao redige e-mails, tokens, URLs e endpoints CDP', () => {
+// ---- Rodada 4, item 4: códigos de erro FECHADOS + mensagens da interface ----
+
+test('exceção vira código fechado + mensagem fixa da interface (texto bruto nunca sai)', () => {
   const casos = [
-    new Error(`login de ${SENSIVEL.email} falhou com ${SENSIVEL.token}`),
-    new Error(`navegação para ${SENSIVEL.urlAuth} bloqueada`),
-    new Error(`CDP desconectado: ${SENSIVEL.cdp}`),
-    new Error(`aluno com cpf ${SENSIVEL.cpf}`),
+    new Error(`login de ${SENSIVEL.nome} (${SENSIVEL.email}) falhou com ${SENSIVEL.token}`),
+    new Error(`navegação para ${SENSIVEL.urlAuth} bloqueada após timeout`),
+    new Error(`CDP desconectado: ${SENSIVEL.cdp} — net::ERR_CONNECTION_RESET`),
+    new Error(`resposta do aluno: "${'A laranja é uma fruta ' + SENSIVEL.email}" rejeitada`),
+    new TypeError(`porta ${SENSIVEL.urlAuth} não pôde ser capturada`),
   ];
   for (const erro of casos) {
     const s = sanitizarExcecao(erro);
-    assert.ok(!contémValorProibido(JSON.stringify(s)), 'exceção com dado sensível redigido: ' + s.mensagem);
-    assert.equal(s.tipo, 'Error');
+    assert.ok(CODIGOS_ERRO.has(s.codigo), 'código fechado: ' + s.codigo);
+    assert.ok(Object.values(MENSAGENS_ERRO).includes(s.mensagem), 'mensagem vem do dicionário da interface');
+    // Nada do texto bruto (nomes, e-mails, tokens, URLs, respostas) sobrevive:
+    assert.ok(!contémValorProibido(s.mensagem), 'texto bruto vazado: ' + s.mensagem);
+    assert.ok(!/[A-Za-z0-9]{24,}/.test(s.mensagem), 'sem fragmentos longos do texto original');
   }
-  // Sem mensagem: não explode.
-  assert.equal(sanitizarExcecao(null).mensagem, '');
+  // Sem mensagem: não explode; mensagem continua definida pela interface.
+  const vazio = sanitizarExcecao(null);
+  assert.equal(vazio.codigo, 'ERRO_INESPERADO');
+  assert.ok(vazio.mensagem.length > 0);
+});
+
+test('códigos de erro cobrem as classes esperadas', () => {
+  assert.equal(sanitizarExcecao(new Error('Navigation timeout of 30000ms exceeded')).codigo, 'ERRO_TEMPO_ESGOTADO');
+  assert.equal(sanitizarExcecao(new Error('net::ERR_NAME_NOT_RESOLVED')).codigo, 'ERRO_REDE');
+  assert.equal(sanitizarExcecao(new Error('Target closed')).codigo, 'ERRO_CONEXAO_PERDIDA');
+  assert.equal(sanitizarExcecao(new Error('qualquer coisa')).codigo, 'ERRO_INESPERADO');
+});
+
+test('sanitizarExcecao: e-mail, token, URL e resposta em exceção não aparecem no resultado', () => {
+  const s = sanitizarExcecao(new Error(`falhou ${SENSIVEL.email} ${SENSIVEL.token} ${SENSIVEL.urlAuth} resposta "${'Minha resposta escrita'}"`));
+  const linha = JSON.stringify(s);
+  for (const v of [SENSIVEL.email, SENSIVEL.token, SENSIVEL.urlAuth, 'Minha resposta escrita']) {
+    assert.ok(!linha.includes(v), `dado sensível vazado: ${v.slice(0, 16)}…`);
+  }
 });
 
 test('esquema fechado não contém campos de dados pessoais por construção', () => {

@@ -30,9 +30,39 @@ const CAMPOS = new Set([
   'atividades', 'lotes', 'turmas', 'comPendencias', 'capturasFalhas',
   'pendentes', 'prontas', 'revisao', 'finalizadas', 'jaCorrigidas',
   'falhas', 'recebidos', 'etapa', 'destino', 'status', 'port',
-  // Exceções sanitizadas (texto redigido por sanitizarTexto):
-  'mensagem', 'tipo',
+  // Erros: código FECHADO + mensagem definida pela interface (nunca texto
+  // bruto de exceções — ver CODIGOS_ERRO/MENSAGENS_ERRO).
+  'codigo', 'mensagem', 'tipo',
 ]);
+
+// ------------------------------------------------------------------
+// Erros: códigos FECHADOS e mensagens definidas pela interface
+// (rodada 4, item 4). Exceções NUNCA entregam seu texto bruto: são
+// classificadas num código fechado e viram a mensagem fixa da UI.
+// ------------------------------------------------------------------
+const REGRAS_CODIGO = [
+  [/timed?\s?out|timeout|excediu/i, 'ERRO_TEMPO_ESGOTADO'],
+  [/net::|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|ERR_CONNECTION|ERR_NAME|ERR_INTERNET/i, 'ERRO_REDE'],
+  [/target closed|browser closed|page closed|session closed|context closed|detached|disconnected|EPIPE|EPERM/i, 'ERRO_CONEXAO_PERDIDA'],
+];
+
+const MENSAGENS_ERRO = {
+  ERRO_TEMPO_ESGOTADO: 'A operação demorou mais do que o esperado e foi interrompida.',
+  ERRO_REDE: 'Problema de comunicação com o portal. Verifique a conexão e tente novamente.',
+  ERRO_CONEXAO_PERDIDA: 'A comunicação interna foi perdida. Reinicie o aplicativo.',
+  ERRO_INESPERADO: 'Algo inesperado interrompeu a operação. Tente novamente.',
+};
+
+const CODIGOS_ERRO = new Set(Object.keys(MENSAGENS_ERRO));
+
+/** Classifica uma exceção num código FECHADO (nada de texto livre). */
+function codigoDoErro(erro) {
+  const bruto = erro && erro.message ? String(erro.message) : String(erro == null ? '' : erro);
+  for (const [padrao, codigo] of REGRAS_CODIGO) {
+    if (padrao.test(bruto)) return codigo;
+  }
+  return 'ERRO_INESPERADO';
+}
 
 // Redação de padrões sensíveis em textos livres (defesa em profundidade).
 const REDACOES = [
@@ -64,11 +94,13 @@ function sanitizarEvento(event, detail = {}) {
   return { event: ev, detail: limpo };
 }
 
-/** Sanitiza uma exceção antes de gravar evidências: tipo + mensagem redigida. */
+/** Sanitiza uma exceção: tipo + código FECHADO + mensagem fixa da interface.
+ *  O texto bruto da exceção NUNCA é encaminhado (nem redigido): nomes,
+ *  respostas, referências e texto do portal não podem vazar por mensagens. */
 function sanitizarExcecao(erro) {
   const tipo = erro && erro.name ? String(erro.name) : 'Erro';
-  const bruto = erro && erro.message ? String(erro.message) : String(erro == null ? '' : erro);
-  return { tipo, mensagem: sanitizarTexto(bruto).slice(0, 300) };
+  const codigo = codigoDoErro(erro);
+  return { tipo, codigo, mensagem: MENSAGENS_ERRO[codigo] };
 }
 
-module.exports = { sanitizarEvento, sanitizarExcecao, sanitizarTexto, EVENTOS, CAMPOS };
+module.exports = { sanitizarEvento, sanitizarExcecao, sanitizarTexto, codigoDoErro, CODIGOS_ERRO, MENSAGENS_ERRO, EVENTOS, CAMPOS };

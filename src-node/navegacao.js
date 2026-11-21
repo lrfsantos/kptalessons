@@ -19,7 +19,7 @@ async function irPara(page, destino, url, reportar = () => {}) {
     return true;
   } catch (e) {
     const exc = sanitizarExcecao(e);
-    reportar('NAVEGACAO_FALHOU', { destino, mensagem: exc.mensagem });
+    reportar('NAVEGACAO_FALHOU', { destino, codigo: exc.codigo, mensagem: exc.mensagem });
     return false;
   }
 }
