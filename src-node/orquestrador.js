@@ -198,7 +198,8 @@ async function rodarFluxo(demoPort) {
     try { await panel.close(); } catch { /* já fechado */ }
   });
   const panelPort = Number(new URL(panel.url).port);
-  console.log('CNA_PORTS ' + JSON.stringify({ ports: [demoPort, panelPort] }));
+  const painelPath = new URL(panel.url).pathname;
+  console.log('CNA_PORTS ' + JSON.stringify({ telasPort: demoPort, painelPort, painelPath }));
   evento('PANEL_READY', { lotes: coleta.collection.batches.length, atividades: coleta.collection.batches.reduce((n, b) => n + b.total, 0) });
   await barraEstado(page, '');
   await irPara(page, panel.url);

@@ -9,14 +9,35 @@ use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager, RunEvent, State, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_single_instance::init as single_instance_init;
 
+/// Origens locais autorizadas DESTA execução: portas do servidor de telas
+/// (caminhos fixos conhecidos) e porta+prefixo/token do painel.
+#[derive(Default)]
+struct OrigensLocais {
+    telas_ports: Mutex<HashSet<u16>>,
+    /// (porta do painel, prefixo de caminho "/<token>/") anunciados no handshake.
+    painel: Mutex<Option<(u16, String)>>,
+}
+
 /// Estado do processo auxiliar Node (sidecar) e do perfil temporário.
 struct SidecarState {
     child: Mutex<Option<Child>>,
     stdin: Mutex<Option<std::process::ChildStdin>>,
     profile_dir: PathBuf,
-    /// Portas locais (servidor de telas + painel) anunciadas pelo sidecar.
-    local_ports: Arc<Mutex<HashSet<u16>>>,
+    /// Origens locais (servidor de telas + painel) anunciadas pelo sidecar.
+    origens: Arc<OrigensLocais>,
 }
+
+/// Caminhos autorizados do servidor de telas (rotas fixas de src-node/telas.js).
+const TELAS_PATHS: [&str; 8] = [
+    "/",
+    "/progresso",
+    "/conclusao",
+    "/styles.css",
+    "/fluent.css",
+    "/app.js",
+    "/progresso.js",
+    "/conclusao.js",
+];
 
 // ----------------------------------------------------------------
 // Perfil temporário: identificador criptográfico + marcador de posse
@@ -114,23 +135,37 @@ fn wait_cdp_port(profile: &Path, timeout: Duration) -> Result<u16, String> {
 // Allowlist de navegação (5.4)
 // ----------------------------------------------------------------
 
-/// Origens permitidas na única janela: a origem Tauri da aplicação,
-/// os servidores locais DESTA execução (portas anunciadas pelo sidecar,
-/// via HTTP apenas no loopback) e o portal CNA apenas por HTTPS (443).
-/// Sem curingas: nada de *.cna.com.br, nem HTTP para o portal.
-fn allowed_url(url: &Url, local_ports: &Arc<Mutex<HashSet<u16>>>) -> bool {
+/// Origens permitidas na única janela: a origem Tauri EXATA da aplicação,
+/// os servidores locais DESTA execução (somente 127.0.0.1 em porta anunciada,
+/// com caminho/token autorizado, via HTTP apenas no loopback) e o portal CNA
+/// apenas por HTTPS (443). Sem curingas: nada de *.cna.com.br, nem HTTP para
+/// o portal, nem porta fora do padrão.
+fn allowed_url(url: &Url, origens: &OrigensLocais) -> bool {
     let scheme = url.scheme();
     let host = url.host_str().unwrap_or("");
-    // Origem exata da aplicação (tauri://localhost e espelho Windows).
-    if scheme == "tauri" || (scheme == "http" && host == "tauri.localhost") {
+    // Origem exata da aplicação: tauri://localhost (host obrigatório) e o
+    // espelho Windows http://tauri.localhost na porta padrão apenas.
+    if (scheme == "tauri" && host == "localhost")
+        || (scheme == "http" && host == "tauri.localhost" && url.port().is_none())
+    {
         return true;
     }
-    // Servidores locais da execução: somente 127.0.0.1 em porta conhecida.
+    // Servidores locais da execução: somente 127.0.0.1 em porta conhecida E
+    // caminho autorizado (telas: rotas fixas; painel: prefixo com o token
+    // desta execução). Nada de porta não anunciada ou caminho livre.
     if scheme == "http" && host == "127.0.0.1" {
         if let Some(port) = url.port() {
-            if let Ok(set) = local_ports.lock() {
-                if set.contains(&port) {
+            let caminho = url.path();
+            if let Ok(set) = origens.telas_ports.lock() {
+                if set.contains(&port) && TELAS_PATHS.contains(&caminho) {
                     return true;
+                }
+            }
+            if let Ok(guard) = origens.painel.lock() {
+                if let Some((porta_painel, prefixo)) = guard.as_ref() {
+                    if *porta_painel == port && caminho.starts_with(prefixo.as_str()) {
+                        return true;
+                    }
                 }
             }
         }
@@ -191,10 +226,38 @@ fn spawn_sidecar(base: &Path, cdp_port: u16) -> Result<(Child, std::process::Chi
     Ok((child, stdin))
 }
 
+/// Estado emitido à UI quando o stdout do sidecar chega ao fim (EOF = processo
+/// morreu). Antes do handshake: falha de inicialização; depois: queda inesperada
+/// — a interface NUNCA fica aparentemente funcional sem comunicação.
+fn estado_no_eof(pronto: bool) -> &'static str {
+    if pronto {
+        "FALHA_SIDECAR"
+    } else {
+        "FALHA_INICIALIZACAO"
+    }
+}
+
+/// Drena o stderr do sidecar continuamente: sem isso, pipes cheios travam o
+/// processo. Conteúdo técnico é descartado (nunca encaminhado à UI/privacidade).
+fn drenar_stderr(child: &mut Child) {
+    if let Some(stderr) = child.stderr.take() {
+        std::thread::spawn(move || {
+            for line in BufReader::new(stderr).lines() {
+                if line.is_err() {
+                    break;
+                }
+                // Diagnóstico técnico do node: consumido e descartado.
+            }
+        });
+    }
+}
+
 /// Lê o stdout do sidecar: linhas `CNA_*` são o protocolo de handshake/
 /// eventos; demais linhas (log técnico) NÃO vão para a interface.
-/// EOF no stdout (processo morreu antes do handshake) => FALHA na UI.
-fn watch_sidecar_stdout(app: tauri::AppHandle, child: &mut Child, ports: Arc<Mutex<HashSet<u16>>>) {
+/// EOF no stdout (processo morreu) => FALHA estruturada na UI, ANTES ou
+/// DEPOIS do handshake.
+fn watch_sidecar_stdout(app: tauri::AppHandle, child: &mut Child, origens: Arc<OrigensLocais>) {
+    drenar_stderr(child);
     let Some(stdout) = child.stdout.take() else {
         return;
     };
@@ -205,26 +268,25 @@ fn watch_sidecar_stdout(app: tauri::AppHandle, child: &mut Child, ports: Arc<Mut
             if let Some(rest) = line.strip_prefix("CNA_SIDECAR_READY ") {
                 pronto = true;
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(rest) {
-                    let mut set = ports.lock().unwrap();
                     if let Some(p) = v["demoPort"].as_u64() {
-                        set.insert(p as u16);
-                    }
-                    if let Some(p) = v["panelPort"].as_u64() {
-                        set.insert(p as u16);
+                        origens.telas_ports.lock().unwrap().insert(p as u16);
                     }
                     let _ = app.emit("app-estado", ("SIDECAR_PRONTO", rest));
                 }
             } else if line.starts_with("CNA_CDP_CONECTADO") {
                 let _ = app.emit("app-estado", ("WEBVIEW2_CONECTADO", "{}"));
             } else if let Some(rest) = line.strip_prefix("CNA_PORTS ") {
-                // Portas anunciadas depois do handshake (painel criado após a coleta).
+                // Origens anunciadas depois do handshake: telas + painel (porta e token).
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(rest) {
-                    let mut set = ports.lock().unwrap();
-                    if let Some(arr) = v["ports"].as_array() {
-                        for p in arr {
-                            if let Some(p) = p.as_u64() {
-                                set.insert(p as u16);
-                            }
+                    if let Some(p) = v["telasPort"].as_u64() {
+                        origens.telas_ports.lock().unwrap().insert(p as u16);
+                    }
+                    if let (Some(porta), Some(caminho)) =
+                        (v["painelPort"].as_u64(), v["painelPath"].as_str())
+                    {
+                        if caminho.starts_with('/') && caminho.len() >= 2 {
+                            *origens.painel.lock().unwrap() =
+                                Some((porta as u16, caminho.to_string()));
                         }
                     }
                 }
@@ -234,12 +296,16 @@ fn watch_sidecar_stdout(app: tauri::AppHandle, child: &mut Child, ports: Arc<Mut
             }
             // Outras linhas: log técnico do node — não encaminhadas à UI (privacidade).
         }
-        if !pronto {
-            let msg = serde_json::json!({
+        let msg = if pronto {
+            serde_json::json!({
+                "mensagem": "O serviço interno foi encerrado inesperadamente. Tente reiniciar; se persistir, feche e abra o aplicativo novamente."
+            }).to_string()
+        } else {
+            serde_json::json!({
                 "mensagem": "O aplicativo não conseguiu iniciar o serviço interno. Feche e tente novamente; se persistir, reinstale."
-            }).to_string();
-            let _ = app.emit("app-estado", ("FALHA_INICIALIZACAO", msg));
-        }
+            }).to_string()
+        };
+        let _ = app.emit("app-estado", (estado_no_eof(pronto), msg));
     });
 }
 
@@ -247,9 +313,10 @@ fn emit_estado(app: &tauri::AppHandle, estado: &str, detalhe: &str) {
     let _ = app.emit("app-estado", (estado, detalhe));
 }
 
-/// Encerramento gracioso: stdin "shutdown" -> espera com timeout -> kill.
-/// Depois remove o perfil temporário (melhor esforço, com tentativas).
-fn shutdown_sidecar(state: &State<'_, SidecarState>) {
+/// Encerra o sidecar anterior (gracioso via stdin "shutdown" -> espera com
+/// timeout -> kill). Usado no fim do app E antes de reinicializar, impedindo
+/// reinicialização duplicada com processos órfãos.
+fn parar_sidecar(state: &State<'_, SidecarState>) {
     if let Some(mut stdin) = state.stdin.lock().ok().and_then(|mut g| g.take()) {
         let _ = stdin.write_all(b"shutdown\n");
         let _ = stdin.flush();
@@ -279,6 +346,17 @@ fn shutdown_sidecar(state: &State<'_, SidecarState>) {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
+    // As portas/origens pertencem ao processo anterior: limpa antes de outro spawn.
+    if let Ok(mut set) = state.origens.telas_ports.lock() {
+        set.clear();
+    }
+    *state.origens.painel.lock().unwrap() = None;
+}
+
+/// Encerramento do aplicativo: para o sidecar e remove o perfil temporário
+/// (melhor esforço, com tentativas — o WebView2 pode demorar a soltar a pasta).
+fn shutdown_sidecar(state: &State<'_, SidecarState>) {
+    parar_sidecar(state);
     // Os processos internos do WebView2 desligam de forma assíncrona; a pasta
     // pode permanecer travada por alguns instantes. Tenta algumas vezes antes
     // de desistir (a inicialização seguinte também remove residuos).
@@ -312,9 +390,12 @@ fn iniciar_sidecar(
     state: &State<'_, SidecarState>,
     base: &Path,
 ) -> Result<(), String> {
+    // Impede reinicialização duplicada: encerra corretamente qualquer
+    // processo anterior antes de iniciar outro sidecar.
+    parar_sidecar(state);
     let cdp_port = wait_cdp_port(&state.profile_dir, Duration::from_secs(30))?;
     let (mut child, stdin) = spawn_sidecar(base, cdp_port)?;
-    watch_sidecar_stdout(app.clone(), &mut child, state.local_ports.clone());
+    watch_sidecar_stdout(app.clone(), &mut child, state.origens.clone());
     if let Ok(mut g) = state.child.lock() {
         *g = Some(child);
     }
@@ -328,67 +409,132 @@ fn iniciar_sidecar(
 mod tests {
     use super::*;
 
-    fn ports(items: &[u16]) -> Arc<Mutex<HashSet<u16>>> {
-        Arc::new(Mutex::new(items.iter().copied().collect()))
+    fn origens(telas: &[u16], painel: Option<(u16, &str)>) -> Arc<OrigensLocais> {
+        let o = Arc::new(OrigensLocais::default());
+        for p in telas {
+            o.telas_ports.lock().unwrap().insert(*p);
+        }
+        if let Some((porta, prefixo)) = painel {
+            *o.painel.lock().unwrap() = Some((porta, prefixo.to_string()));
+        }
+        o
     }
+
+    // ---- Item 4: allowlist de navegação --------------------------------
 
     #[test]
     fn origem_tauri_permitida() {
-        let p = ports(&[]);
+        let o = origens(&[], None);
         assert!(allowed_url(
             &Url::parse("tauri://localhost/index.html").unwrap(),
-            &p
+            &o
         ));
         assert!(allowed_url(
             &Url::parse("http://tauri.localhost/index.html").unwrap(),
-            &p
+            &o
         ));
     }
 
     #[test]
-    fn servidor_local_somente_porta_anunciada() {
-        let p = ports(&[51234]);
-        assert!(allowed_url(
-            &Url::parse("http://127.0.0.1:51234/painel/abc/").unwrap(),
-            &p
+    fn origem_tauri_incorreta_é_bloqueada() {
+        let o = origens(&[], None);
+        // Host Tauri incorreto (origem de outro app/falso positivo de esquema).
+        assert!(!allowed_url(
+            &Url::parse("tauri://evil/index.html").unwrap(),
+            &o
         ));
         assert!(!allowed_url(
-            &Url::parse("http://127.0.0.1:9999/").unwrap(),
-            &p
+            &Url::parse("tauri://outro.localhost/").unwrap(),
+            &o
         ));
+        // Porta Tauri inesperada no espelho Windows (a URL crate normaliza
+        // :80 explícito para o padrão — mesma origem, permitido).
+        assert!(!allowed_url(
+            &Url::parse("http://tauri.localhost:8080/index.html").unwrap(),
+            &o
+        ));
+    }
+
+    #[test]
+    fn servidor_local_somente_porta_e_caminho_anunciados() {
+        let o = origens(&[51234], Some((55555, "/abcdef123/")));
+        // Servidor de telas: porta anunciada + rota fixa.
+        assert!(allowed_url(
+            &Url::parse("http://127.0.0.1:51234/conclusao?erro=x").unwrap(),
+            &o
+        ));
+        // Painel: porta + token desta execução.
+        assert!(allowed_url(
+            &Url::parse("http://127.0.0.1:55555/abcdef123/").unwrap(),
+            &o
+        ));
+        // Host local incorreto (não 127.0.0.1).
         assert!(!allowed_url(
             &Url::parse("http://localhost:51234/").unwrap(),
-            &p
+            &o
         ));
         assert!(!allowed_url(
             &Url::parse("http://192.168.0.10:51234/").unwrap(),
-            &p
+            &o
+        ));
+        // Porta local não anunciada.
+        assert!(!allowed_url(
+            &Url::parse("http://127.0.0.1:9999/").unwrap(),
+            &o
+        ));
+        // Caminho local não autorizado (porta certa, caminho fora da lista).
+        assert!(!allowed_url(
+            &Url::parse("http://127.0.0.1:51234/qualquer-coisa").unwrap(),
+            &o
+        ));
+        // Token de painel incorreto (prefixo diferente do anunciado).
+        assert!(!allowed_url(
+            &Url::parse("http://127.0.0.1:55555/token-falso/").unwrap(),
+            &o
         ));
     }
 
     #[test]
     fn portal_cna_somente_https_porta_padrao() {
-        let p = ports(&[]);
+        let o = origens(&[], None);
         assert!(allowed_url(
             &Url::parse("https://app.cna.com.br/login").unwrap(),
-            &p
+            &o
         ));
+        // HTTP para o portal: proibido.
         assert!(!allowed_url(
             &Url::parse("http://app.cna.com.br/login").unwrap(),
-            &p
+            &o
         ));
+        // Porta não padrão: proibida.
         assert!(!allowed_url(
             &Url::parse("https://app.cna.com.br:8443/login").unwrap(),
-            &p
+            &o
         ));
+        // Domínio CNA malicioso (sem curingas).
         assert!(!allowed_url(
             &Url::parse("https://malicioso.cna.com.br/login").unwrap(),
-            &p
+            &o
         ));
         assert!(!allowed_url(
-            &Url::parse("https://evil.example/").unwrap(),
-            &p
+            &Url::parse("https://app.cna.com.br.evil.example/login").unwrap(),
+            &o
         ));
+        // Domínio externo.
+        assert!(!allowed_url(
+            &Url::parse("https://evil.example/").unwrap(),
+            &o
+        ));
+    }
+
+    // ---- Item 3: monitoramento do sidecar ------------------------------
+
+    #[test]
+    fn eof_do_stdout_informa_falha_antes_e_depois_do_handshake() {
+        // Antes do handshake: falha de inicialização (comportamento existente).
+        assert_eq!(estado_no_eof(false), "FALHA_INICIALIZACAO");
+        // Depois do handshake: queda inesperada estruturada (novo).
+        assert_eq!(estado_no_eof(true), "FALHA_SIDECAR");
     }
 }
 
@@ -396,7 +542,7 @@ pub fn run() {
     let profile = profile_dir();
     cleanup_stale_profiles(&profile);
 
-    let local_ports: Arc<Mutex<HashSet<u16>>> = Arc::new(Mutex::new(HashSet::new()));
+    let local_ports: Arc<OrigensLocais> = Arc::new(OrigensLocais::default());
 
     // O loader do WebView2 lê estas variáveis ANTES da criação do primeiro
     // ambiente do navegador (aqui, antes de `.run()`).
@@ -422,7 +568,7 @@ pub fn run() {
             child: Mutex::new(None),
             stdin: Mutex::new(None),
             profile_dir: profile.clone(),
-            local_ports: local_ports.clone(),
+            origens: local_ports.clone(),
         })
         .setup(move |app| {
             let base = if cfg!(debug_assertions) {

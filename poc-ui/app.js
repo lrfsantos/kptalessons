@@ -7,6 +7,9 @@ function mostrarErro(mensagem) {
   div.className = 'aviso atencao';
   div.setAttribute('role', 'alert');
   div.innerHTML = '<strong>Falha na inicialização.</strong> ';
+  if (arguments.length > 1 && arguments[1] === 'FALHA_SIDECAR') {
+    div.innerHTML = '<strong>Serviço interno interrompido.</strong> ';
+  }
   div.appendChild(document.createTextNode(mensagem || 'Tente novamente.'));
   const btn = document.createElement('button');
   btn.className = 'botao primario margem-topo';
@@ -28,10 +31,10 @@ function mostrarErro(mensagem) {
 if (window.__TAURI__ && window.__TAURI__.event) {
   window.__TAURI__.event.listen('app-estado', function (e) {
     var payload = e.payload || [];
-    if (payload[0] === 'FALHA_INICIALIZACAO') {
+    if (payload[0] === 'FALHA_INICIALIZACAO' || payload[0] === 'FALHA_SIDECAR') {
       var msg = '';
       try { msg = JSON.parse(payload[1]).mensagem; } catch (err) { /* usa padrão */ }
-      mostrarErro(msg);
+      mostrarErro(msg, payload[0]);
     }
   });
 }
