@@ -23,6 +23,11 @@ New-Item -ItemType Directory -Force -Path (Join-Path $dest 'ui') | Out-Null
 Copy-Item (Join-Path $repo 'ui\painel.html') (Join-Path $dest 'ui\painel.html')
 Copy-Item (Join-Path $repo 'ui\painel.css') (Join-Path $dest 'ui\painel.css')
 Copy-Item (Join-Path $repo 'ui\painel.js') (Join-Path $dest 'ui\painel.js')
+# Modulos exigidos pelo orquestrador via BASE (resources/) — sem eles o
+# sidecar morre no startup do app instalado (descoberto no teste NSIS fisico).
+foreach ($arquivo in @('login.js', 'scraper.js', 'executor.js', 'corrigir.js', 'instrucoes_correcao.md')) {
+  Copy-Item (Join-Path $repo $arquivo) (Join-Path $dest $arquivo)
+}
 Copy-Item (Join-Path $repo 'poc-ui') (Join-Path $dest 'poc-ui') -Recurse
 Copy-Item (Join-Path $repo 'node_modules\playwright-core') (Join-Path $dest 'node_modules\playwright-core') -Recurse
 
