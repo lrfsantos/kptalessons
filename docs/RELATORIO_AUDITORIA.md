@@ -216,3 +216,65 @@ Data: 21/11/2026. Branch: feat/tauri-webview2-real-flow-fluent (PR #1, sem merge
 
 - CI desta rodada roda apos o push destes commits; confirmacao do build NSIS pendente ate la.
 - Teste manual sem Iniciar: fluxo de coleta/aplicacao nao exercitado fisicamente nesta rodada.
+
+## 14. Rodada 3 - confiabilidade, encerramento, privacidade e testes
+
+**Data:** 2026-11-21
+**Branch:** `feat/tauri-webview2-real-flow-fluent` (continua, sem merge)
+**HEAD final:** `7864db77948105fbb005cab0168de19b069393a3`
+**Base de referencia:** `2356862` (HEAD da rodada 2)
+**Sem push nesta rodada:** quem orquestra faz push e acompanha o CI (PR #1 segue aberto).
+
+### Commits criados (9, um por item)
+
+| Hash | Item | Conteudo |
+|------|------|----------|
+| `c8e5c17` | 1-2 | Ciclo de vida: Promise unica de encerramento, ordem LIFO (painel antes de CDP), drenagem de recursos tardios com teto; `fecharServidor` agora para de aceitar conexoes ANTES, aguarda as em andamento e so encerra conexoes remanescentes como fallback no teto |
+| `021901a` | 3-4 | Sidecar: monitoramento continuo de vida (queda apos handshake emite `FALHA_SIDECAR` estruturado para a UI), stderr drenado continuamente (sem travar por pipe cheio), reinicializacao sem duplicacao (`parar_sidecar` encerra o processo anterior e limpa origens antes de novo spawn); Allowlist: origem Tauri EXATA (`tauri://localhost` com host obrigatorio; `http://tauri.localhost` so porta padrao), servidor de telas so com rotas fixas conhecidas (`TELAS_PATHS`), painel so com porta+prefixo/token da execucao (protocolo `CNA_PORTS` agora envia `telasPort`/`painelPort`/`painelPath`) |
+| `535464d` | 5 | Higiene: `finally` com remocao em todos os testes que criam temp dirs (batches, ciclovida, csp, monitor, parser x5, retorno-realista, session x2) |
+| `7864db7` | 5 | Teste de higiene da suite em TEMP isolado (ver items abaixo) + correcao de `try` quebrado no csp.test.js |
+| `b0f51fa` | 6 | Privacidade: camada central `src-node/eventos.js` com esquema FECHADO (eventos e campos com allowlist); orquestrador so emite/registra eventos sanitizados; excecoes sanitizadas antes das evidencias |
+| `e4877f9` | 7 | Navegacao: `irPara()` sem ignorancia silenciosa (modulo novo `src-node/navegacao.js`); falha em portal/painel/conclusao gera `NAVEGACAO_FALHOU` estruturado e NUNCA emite COMPLETED/ sucesso |
+| `643e100` | 8 | CI: `cargo test` explicito no job Windows, apos o empacotamento de resources (tauri.conf.json referencia resources/ui/painel.js); sem continue-on-error |
+| `1362ce5` | 9 | Guard: triagem contextual ciente de FRASES - maiuscula inicial de frase nao esconde portugues; nome proprio no MEIO continua ignorado; diacriticos exclusivos (a/o/c com til/cedilha) contam mesmo maiusculos; nao e lista simplista (mantem 2+ sinais e proporcao) |
+| `46223b7` | - | Prompt da rodada 3 arquivado em docs/PROMPT_RODADA3.md |
+
+### Arquivos modificados
+
+- `src-node/ciclovida.js` (itens 1-2), `src-node/orquestrador.js` (itens 3-7), `src-node/eventos.js` e `src-node/navegacao.js` (NOVOS, itens 6-7)
+- `src-tauri/src/lib.rs` (itens 3-4), `poc-ui/app.js` (item 3: UI trata `FALHA_SIDECAR` com cartao de erro + retry)
+- `lib/guard.js` (item 9); `.github/workflows/tests.yml` (item 8)
+- Testes: `tests/ciclovida.test.js`, `tests/csp.test.js`, `tests/parser.test.js`, `tests/batches.test.js`, `tests/monitor.test.js`, `tests/retorno-realista.test.js`, `tests/session.test.js`, `tests/guard.test.js` (novos testes de itens 1, 2, 5, 9) e NOVOS `tests/eventos.test.js`, `tests/navegacao.test.js`, `tests/higiene-temp.test.js`
+
+### Resultados de testes locais (executados nesta rodada)
+
+| Suite | Resultado |
+|-------|-----------|
+| `npm test` (Node) | **253 testes: 252 pass, 0 fail, 1 skipped** (skip pre-existente); antes da rodada eram 229 - 24 testes novos |
+| `cargo fmt --check` (src-tauri) | **OK** (sem diffs) |
+| `cargo check` (src-tauri) | **OK** (Finished dev profile sem erros) |
+| `cargo test` (src-tauri) | **OK: 5 passed, 0 failed** (4 de allowlist + 1 de EOF do sidecar) |
+
+### Provas (o que foi e nao foi provado)
+
+- **Limpeza dos diretorios de teste (item 5):** PROVADA por `tests/higiene-temp.test.js` - roda os 9 arquivos que criam temp dirs num TEMP isolado (`TEMP`/`TMP` do processo filho) e asserta que nao sobra nenhum diretorio com prefixo proprio da suite (`cna-corretor-run-`, `cna-panel-`, `cna-test-`, etc.). Rodou verde no `npm test` completo.
+- **Encerramento gracioso (itens 1-2):** PROVADO por testes: Promise unica em chamadas simultaneas (`a === b === c`), sair somente apos limpeza, recurso assincrono demorado aguardado, ordem LIFO (painel antes de CDP), recurso registrado durante o encerramento executado, falha simulada nao impede limpeza; `fecharServidor` com requisicao em voo entrega a resposta por inteiro ANTES do fechamento, e conexao presa e encerrada so no teto (fallback).
+- **Queda do sidecar (item 3):** PROVADA em unidade (`estado_no_eof`): antes do handshake emite `FALHA_INICIALIZACAO` (existente) e DEPOIS emite `FALHA_SIDECAR` (novo); a UI (`poc-ui/app.js`) trata os dois estados com cartao de erro + botao "Tentar novamente" (que invoca `reiniciar_sidecar`, que agora encerra o processo anterior antes de novo spawn). A deteccao fisica da queda com o app real (matar o node durante execucao) NAO foi exercitada fisicamente.
+- **Bloqueio de origens nao autorizadas (item 4):** PROVADO por 5 testes Rust cobrindo: host Tauri incorreto, porta Tauri inesperada (`:8080`; nota: a URL crate normaliza `:80` explicito para o padrao - mesma origem), host local incorreto (`localhost`, `192.168.x`), porta local nao anunciada, caminho local nao autorizado (porta certa, rota fora de `TELAS_PATHS`), token de painel incorreto (prefixo diferente do anunciado), dominio CNA malicioso (`malicioso.cna.com.br`, `app.cna.com.br.evil.example`), HTTP para o portal, porta nao padrao no portal e dominio externo.
+- **Privacidade (item 6):** PROVADA por `tests/eventos.test.js` (7 testes) com strings ficticias: evento fora do esquema vira `EVENTO_DESCONHECIDO` sem campos; campos fora da allowlist (nome, aluno, resposta, cookie, token) sao descartados; textos permitidos sao redigidos (`[EMAIL]`, `[URL]`, `[CDP]`, `[CPF]`, `[TELEFONE]`, `[CARTAO]`, `[TOKEN]`); excecoes sanitizadas antes das evidencias. Nomes proprios em texto livre NAO sao redaziveis por padrao - a protecao de nomes e na allowlist de CAMPOS (provida por teste).
+- **Navegacao/falhas (item 7):** PROVADA por `tests/navegacao.test.js` (5 testes): falha simulada em painel/conclusao/portal retorna false, emite `NAVEGACAO_FALHOU` com destino e mensagem sanitizada, e nao vira sucesso; no fluxo real, falha em qualquer transicao agora emite `APPLICATION_FAILED` e nao emite `APPLICATION_COMPLETED`.
+- **CI (item 8):** workflow atualizado; a execucao do CI em si so acontece apos o push (feito por quem orquestra).
+- **Detecao contextual de portugues (item 9):** PROVADA por testes: frase PT iniciada por maiuscula aciona ("Nao terminei meu trabalho...", "Nao entendi a pergunta"); frase EN iniciada por maiuscula nao aciona ("This is...", "However..."); nome proprio PT dentro de frase EN nao aciona (Joao, Sao Paulo no meio); palavra isolada de autocorreto nao aciona; palavras estrangeiras e lugares nao acionam; frase PT dentro de resposta EN aciona; resposta inteira em PT aciona. 44/44 testes do guard verdes.
+- **Build NSIS e tamanho:** NAO executado localmente nesta rodada (build pesado; o job Windows do CI produz o instalador apos o push). Pendente de confirmacao no CI.
+
+### Seguranca (item 10)
+
+- Nenhuma conta real, nenhuma atividade real, nenhum clique em Finalizar, nenhum dado real: todos os testes usam fixtures/mocks/diretorios ficticios.
+- Regra preservada: `appliedRefs` so e atualizado apos evidencia positiva de finalizacao (executor.js intocado nesta rodada).
+- Politica de notas (lib/notas.js) e semantica de finalizacao automatica: intocadas. Fluxo funcional de correcao: intocado (so confiabilidade nas bordas).
+
+### Pendencias fisicas
+
+- Executar push e confirmar CI verde: matriz Node 22/24 (Ubuntu/Windows) com `npm test` + `npm audit --audit-level=high`, job Windows com `cargo fmt --check` + `cargo check` + `cargo test` + build NSIS + upload do instalador.
+- Teste fisico da queda do sidecar (matar o processo node com o app aberto e verificar o cartao de erro/retry na UI real).
+- Teste fisico do ciclo completo (login manual no portal real com fixture de fluxo) - como nas rodadas anteriores, depende de sessao real do professor e segue fora do escopo automatizado.
