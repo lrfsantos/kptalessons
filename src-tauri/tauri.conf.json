@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Corretor CNA POC",
+  "productName": "Corretor CNA",
   "version": "0.1.0",
-  "identifier": "com.cna.corretorpoc",
+  "identifier": "com.cna.corretor",
   "build": {
     "frontendDist": "../poc-ui"
   },
@@ -28,6 +28,7 @@
       "resources/lib/**/*",
       "resources/ui/painel.html",
       "resources/ui/painel.css",
+      "resources/ui/painel.js",
       "resources/poc-ui/**/*",
       "resources/node_modules/playwright-core/**/*"
     ],
