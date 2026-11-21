@@ -25,6 +25,7 @@ test('appliedRefs: reexecução não duplica', () => {
 
 test('estabilidade: tamanho/data precisam permanecer iguais em verificações consecutivas', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cna-stable-'));
+  try {
   const f = path.join(dir, 'lote-01.devolvido.md');
   fs.writeFileSync(f, 'abc');
   w.stableTracker.state.clear();
@@ -35,11 +36,15 @@ test('estabilidade: tamanho/data precisam permanecer iguais em verificações co
   const s2 = w.snapshotArquivos(dir, ['lote-01.devolvido.md']);
   assert.equal(w.stableTracker.update(s2).length, 0, 'mudou: volta a não estável');
   assert.equal(w.stableTracker.update(s2).length, 1);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('política real: nova execução arquiva a anterior sem apagar documentos', () => {
   const md = require('../lib/md');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cna-archive-'));
+  try {
   fs.writeFileSync(path.join(dir, 'lote-01.md'), 'conteudo do lote antigo');
   fs.writeFileSync(path.join(dir, 'lote-01.devolvido.md'), 'retorno antigo');
   const archive = md.archivePrevious(dir);
@@ -49,6 +54,9 @@ test('política real: nova execução arquiva a anterior sem apagar documentos',
   assert.ok(content.includes('conteudo do lote antigo'), 'conteúdo preservado');
   assert.ok(content.includes('lote-01.devolvido.md'), 'retorno preservado');
   assert.equal(fs.readdirSync(dir).filter(f => /^lote-\d+\.md$/.test(f)).length, 0, 'pasta ativa limpa');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('monitoramento: não inicia com apenas parte dos lotes (validação usa inspectReturnedBatches)', () => {

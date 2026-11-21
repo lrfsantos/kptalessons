@@ -125,3 +125,60 @@ Arquivos relevantes para auditoria:
 - `tests/startup.test.js` — testes do servidor
 - `tests/session.test.js` — ajuste de regex (linha 73)
 - `README.md` — documentação do fluxo atualizado
+
+
+---
+
+# CorreÃ§Ãµes da migraÃ§Ã£o Tauri + WebView2 (branch `feat/tauri-webview2-real-flow-fluent`)
+
+**Data:** 2026-11-20 Â· Base: POC `poc/tauri-webview2-single-window` Â· Status: em validaÃ§Ã£o (PR aberto, sem merge)
+
+## Corrigido nesta branch
+
+1. **Janela Ãºnica real** â€” `login.js`/`scraper.js`/`executor.js` refatorados em
+   `performLogin`/`collectActivities`/`applyAcceptedCorrections` (pÃ¡gina e
+   contexto injetados; sem `launch()`, sem fechar navegador, sem
+   `process.exit()` nas funÃ§Ãµes). O orquestrador `src-node/orquestrador.js`
+   reutiliza as MESMAS funÃ§Ãµes do fluxo CLI antigo (wrappers preservados).
+2. **InstÃ¢ncia Ãºnica** â€” `tauri-plugin-single-instance`; segunda instÃ¢ncia sÃ³ foca a janela.
+3. **Perfil temporÃ¡rio** â€” identificador criptogrÃ¡fico (`getrandom`, 16 bytes)
+   + `owner.json` (PID); limpeza de residuais por rename-exclusivo (nunca por
+   prefixo): perfis em uso sÃ£o preservados.
+4. **Porta CDP** â€” `--remote-debugging-port=0` + leitura de
+   `<perfil>\EBWebView\DevToolsActivePort` (validado no WebView2 real; o
+   arquivo fica na subpasta, nÃ£o na raiz). Sem corrida de `free_port()`.
+5. **Allowlist restrita** â€” origem Tauri exata; `127.0.0.1` somente nas
+   portas anunciadas pelo orquestrador nesta execuÃ§Ã£o; portal apenas por
+   HTTPS na porta padrÃ£o; sem curingas. 3 testes de unidade Rust.
+6. **Handshake e estados** â€” `INICIANDO â†’ SIDECAR_PRONTO â†’ WEBVIEW2_CONECTADO â†’
+   APP_PRONTO` (ou `FALHA_INICIALIZACAO` com tela de erro e "Tentar
+   novamente", comando `reiniciar_sidecar`).
+7. **Encerramento gracioso** â€” stdin `shutdown` â†’ fechar servidores â†’ sair;
+   `kill()` sÃ³ como fallback apÃ³s 8 s; perfil removido apÃ³s a saÃ­da do Node.
+8. **Node empacotado obrigatÃ³rio** em produÃ§Ã£o (sem fallback ao PATH).
+9. **CSP restritiva** em `tauri.conf.json` (antes `null`); scripts inline
+   removidos das telas locais.
+10. **Privacidade dos logs** â€” stdout do Node nÃ£o Ã© mais espelhado na UI;
+    eventos estruturados (`LOGIN_CONFIRMED`, `COLLECTION_*`, `RETURN_*`,
+    `APPLICATION_*`, `REVIEW_REQUIRED`...) sem dados pessoais (nomes,
+    respostas, refs completas ficam fora da interface).
+11. **CalibraÃ§Ã£o de notas** â€” limites 75/50 centralizados em `lib/notas.js`;
+    `hasPortuguese()` contextual (nomes prÃ³prios e autocorreto nÃ£o acionam
+    revisÃ£o; frases em PT acionam); rubricas ponderadas nas instruÃ§Ãµes da IA.
+12. **CI** â€” build NSIS obrigatÃ³rio (removido `continue-on-error`),
+    `cargo fmt --check`, `cargo check`, `cargo test`, artefato do instalador.
+13. **Design system Fluent** â€” `poc-ui/fluent.css` (tokens, claro/escuro,
+    estados, foco, reduced-motion); painel e telas reestilizadas sem mudar
+    o contrato de copiar/colar/validar.
+
+## PendÃªncias registradas
+
+- Testes de mÃ¡quina limpa (sem WebView2) e bootstrapper do instalador: **nÃ£o validados**.
+- Escalas 100/125/150% e resoluÃ§Ãµes alternativas: validaÃ§Ã£o manual pendente.
+- Mica/Acrylic nativos: nÃ£o integrados (fallback sÃ³lido; limitaÃ§Ã£o documentada).
+- Coleta/aplicaÃ§Ã£o reais no portal: exigem login manual do professor â€”
+  validadas apenas com fixtures/mocks atÃ© aqui (regra: nunca automatizar
+  login real nem clicar em Finalizar em atividades reais).
+- Risco CDP residual (processo local durante a execuÃ§Ã£o): documentado em
+  `docs/TAURI_ARQUITETURA.md`.
+

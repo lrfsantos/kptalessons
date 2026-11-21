@@ -99,18 +99,22 @@ test('buildBatches respeita o tamanho de lote e usa nonce novo', () => {
     students: [{ name: 'Aluno Exemplo', studentId: '2', pending: 3, lessons: [mk('1', '2', '5'), mk('1', '2', '6'), mk('1', '2', '7')] }],
   }];
   const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cna-test-'));
-  const { nonce, files, total } = md.buildBatches(classes, { loteSize: 2, outDir: tmp });
-  assert.equal(total, 3);
-  assert.equal(files.length, 2);
-  assert.match(nonce, /^[0-9a-f]{12}$/);
-  const content1 = fs.readFileSync(files[0].path, 'utf8');
-  assert.ok(content1.includes(md.answerStart(nonce)));
-  assert.ok(content1.includes('AGUARDANDO'));
-  // T10: turma e aluno SÓ pelo código; nenhum nome no MD
-  assert.ok(content1.includes('Turma: C1'));
-  assert.ok(content1.includes('Aluno: S2'));
-  assert.ok(!content1.includes('Turma Exemplo'), 'nome da turma não vai para o MD');
-  assert.ok(!content1.includes('Aluno Exemplo'), 'nome do aluno não vai para o MD');
+  try {
+    const { nonce, files, total } = md.buildBatches(classes, { loteSize: 2, outDir: tmp });
+    assert.equal(total, 3);
+    assert.equal(files.length, 2);
+    assert.match(nonce, /^[0-9a-f]{12}$/);
+    const content1 = fs.readFileSync(files[0].path, 'utf8');
+    assert.ok(content1.includes(md.answerStart(nonce)));
+    assert.ok(content1.includes('AGUARDANDO'));
+    // T10: turma e aluno SÓ pelo código; nenhum nome no MD
+    assert.ok(content1.includes('Turma: C1'));
+    assert.ok(content1.includes('Aluno: S2'));
+    assert.ok(!content1.includes('Turma Exemplo'), 'nome da turma não vai para o MD');
+    assert.ok(!content1.includes('Aluno Exemplo'), 'nome do aluno não vai para o MD');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 test('normalizeFlag e parseRevisao', () => {
@@ -131,16 +135,24 @@ test('lotes: padrão 10, teto 10, e 7/10/11/25 atividades', () => {
     prefilter: { flagged: false, reasons: [] },
   });
   const classes = n => [{ name: 'Turma', shift: 'Noite', classId: '1', students: [{ name: 'Aluno', studentId: '2', pending: n, lessons: Array.from({ length: n }, (_, i) => mk(i + 1)) }] }];
-  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cna-lote-'));
-  const count = (n, opts) => md.buildBatches(classes(n), { outDir: fs.mkdtempSync(path.join(require('os').tmpdir(), 'cna-lote-')), ...opts }).files.length;
-  assert.equal(count(7, {}), 1);
-  assert.equal(count(10, {}), 1);
-  assert.equal(count(11, {}), 2);
-  assert.equal(count(25, {}), 3);
-  assert.equal(count(25, { loteSize: 99 }), 3, 'teto de 10 mesmo com env maior');
-  assert.equal(count(25, { loteSize: 4 }), 7, 'variável pode reduzir');
-  assert.equal(count(50, {}), 5, '50 atividades => 5 lotes de 10 (teto preservado)');
-  assert.equal(require('../lib/config').LOTE_SIZE, 10);
+  const dirs = [fs.mkdtempSync(path.join(require('os').tmpdir(), 'cna-lote-'))];
+  const count = (n, opts) => {
+    const d = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cna-lote-'));
+    dirs.push(d);
+    return md.buildBatches(classes(n), { outDir: d, ...opts }).files.length;
+  };
+  try {
+    assert.equal(count(7, {}), 1);
+    assert.equal(count(10, {}), 1);
+    assert.equal(count(11, {}), 2);
+    assert.equal(count(25, {}), 3);
+    assert.equal(count(25, { loteSize: 99 }), 3, 'teto de 10 mesmo com env maior');
+    assert.equal(count(25, { loteSize: 4 }), 7, 'variável pode reduzir');
+    assert.equal(count(50, {}), 5, '50 atividades => 5 lotes de 10 (teto preservado)');
+    assert.equal(require('../lib/config').LOTE_SIZE, 10);
+  } finally {
+    for (const d of dirs) fs.rmSync(d, { recursive: true, force: true });
+  }
 });
 
 test('buildBatches inclui pergunta e resposta capturadas (regressão do fluxo do scraper)', () => {
@@ -152,12 +164,16 @@ test('buildBatches inclui pergunta e resposta capturadas (regressão do fluxo do
   };
   const classes = [{ name: 'Turma', shift: 'Noite', classId: '1', students: [{ name: 'Aluno', studentId: '2', pending: 1, lessons: [l] }] }];
   const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cna-test-'));
-  const { files } = md.buildBatches(classes, { loteSize: 8, outDir: tmp });
-  const content = fs.readFileSync(files[0].path, 'utf8');
-  assert.ok(content.includes('Write about your weekend.'), 'enunciado no MD');
-  assert.ok(content.includes('I went to the park.'), 'resposta no MD');
-  assert.ok(content.includes('**Flag:** AGUARDANDO'));
-  assert.ok(content.includes('**Revisão:** AGUARDANDO'));
+  try {
+    const { files } = md.buildBatches(classes, { loteSize: 8, outDir: tmp });
+    const content = fs.readFileSync(files[0].path, 'utf8');
+    assert.ok(content.includes('Write about your weekend.'), 'enunciado no MD');
+    assert.ok(content.includes('I went to the park.'), 'resposta no MD');
+    assert.ok(content.includes('**Flag:** AGUARDANDO'));
+    assert.ok(content.includes('**Revisão:** AGUARDANDO'));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 test('captura vazia: resposta em branco entra como (vazia); falha de captura fica de fora', () => {
@@ -171,11 +187,15 @@ test('captura vazia: resposta em branco entra como (vazia); falha de captura fic
   };
   const classes = [{ name: 'Turma', shift: 'Noite', classId: '1', students: [{ name: 'Aluno', studentId: '2', pending: 1, lessons: [blank, failed] }] }];
   const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cna-test-'));
-  const { total, files } = md.buildBatches(classes, { loteSize: 8, outDir: tmp });
-  assert.equal(total, 1); // só a em branco entra
-  const content = fs.readFileSync(files[0].path, 'utf8');
-  assert.ok(content.includes('(vazia)'), 'resposta em branco entra como (vazia)');
-  assert.ok(!content.includes('A2'), 'captura falha fica fora do MD');
+  try {
+    const { total, files } = md.buildBatches(classes, { loteSize: 8, outDir: tmp });
+    assert.equal(total, 1); // só a em branco entra
+    const content = fs.readFileSync(files[0].path, 'utf8');
+    assert.ok(content.includes('(vazia)'), 'resposta em branco entra como (vazia)');
+    assert.ok(!content.includes('A2'), 'captura falha fica fora do MD');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 test('parseFile lê Flag, Revisão, Classificação e Score devolvidos', () => {
@@ -368,12 +388,16 @@ test('T10: buildBatches não vaza nome do aluno nem da turma', () => {
     students: [{ name: 'Ana Silva', studentId: '2', pending: 1, lessons: [l] }],
   }];
   const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cna-test-'));
-  const { files } = md.buildBatches(classes, { loteSize: 8, outDir: tmp });
-  const content = fs.readFileSync(files[0].path, 'utf8');
-  assert.ok(!content.includes('Turma Secreta'), 'nome da turma não aparece');
-  assert.ok(!content.includes('Ana Silva'), 'nome do aluno não aparece');
-  assert.ok(content.includes('Turma: C1'));
-  assert.ok(content.includes('Aluno: S2'));
-  assert.ok(content.includes('[NOME]'), 'nome mascarado na resposta');
-  assert.ok(content.includes('[EMAIL]'), 'email mascarado na resposta');
+  try {
+    const { files } = md.buildBatches(classes, { loteSize: 8, outDir: tmp });
+    const content = fs.readFileSync(files[0].path, 'utf8');
+    assert.ok(!content.includes('Turma Secreta'), 'nome da turma não aparece');
+    assert.ok(!content.includes('Ana Silva'), 'nome do aluno não aparece');
+    assert.ok(content.includes('Turma: C1'));
+    assert.ok(content.includes('Aluno: S2'));
+    assert.ok(content.includes('[NOME]'), 'nome mascarado na resposta');
+    assert.ok(content.includes('[EMAIL]'), 'email mascarado na resposta');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });

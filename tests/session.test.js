@@ -18,12 +18,16 @@ test('1: cada execução cria um arquivo de sessão novo e isolado', () => {
 
 test('2: nenhuma execução reutiliza cookies da anterior (estado vazio por padrão)', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cna-sess-'));
-  const f = path.join(dir, 'vazia.json');
-  fs.writeFileSync(f, '{}');
-  const old = process.env.CNA_SESSAO_TEMP;
-  process.env.CNA_SESSAO_TEMP = f;
-  assert.equal(session.readState(), undefined);
-  process.env.CNA_SESSAO_TEMP = old;
+  try {
+    const f = path.join(dir, 'vazia.json');
+    fs.writeFileSync(f, '{}');
+    const old = process.env.CNA_SESSAO_TEMP;
+    process.env.CNA_SESSAO_TEMP = f;
+    assert.equal(session.readState(), undefined);
+    process.env.CNA_SESSAO_TEMP = old;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('3: nenhum arquivo de sessão persistente é criado na pasta do programa', () => {
@@ -54,15 +58,19 @@ test('6: wizard faz login ANTES da coleta', () => {
 
 test('7/8: limpeza remove só os próprios resíduos de execuções encerradas', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cna-stale-'));
-  const mine = path.join(dir, session.PREFIX + '999999.json');
-  const outro = path.join(dir, 'chrome-perfil-do-professor.json');
-  fs.writeFileSync(mine, '{}');
-  fs.writeFileSync(outro, '{}');
-  // cleanupStale usa os.tmpdir(); aqui validamos o filtro por nome/PID na implementação.
-  const code = ler('../lib/session');
-  assert.match(code, /f\.startsWith\(PREFIX\)/);
-  assert.match(code, /pidVivo\(pid\)/);
-  assert.ok(fs.existsSync(outro));
+  try {
+    const mine = path.join(dir, session.PREFIX + '999999.json');
+    const outro = path.join(dir, 'chrome-perfil-do-professor.json');
+    fs.writeFileSync(mine, '{}');
+    fs.writeFileSync(outro, '{}');
+    // cleanupStale usa os.tmpdir(); aqui validamos o filtro por nome/PID na implementação.
+    const code = ler('../lib/session');
+    assert.match(code, /f\.startsWith\(PREFIX\)/);
+    assert.match(code, /pidVivo\(pid\)/);
+    assert.ok(fs.existsSync(outro));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('9: limpeza não apaga dados de atividades/relatórios', () => {

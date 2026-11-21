@@ -92,5 +92,6 @@ test('caminho completo: /api/submit aceita, grava e atualiza o painel 10/10', as
     assert.equal(state1.body.receivedBatches, 1);
   } finally {
     await panel.close();
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

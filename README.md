@@ -4,7 +4,22 @@ Ferramenta **gratuita** para professores do CNA corrigirem atividades escritas d
 (app.cna.com.br). Você escolhe a IA (Gemini, ChatGPT ou outra) — o programa não tem API própria,
 não cobra nada e não envia dados para nenhum serviço pago.
 
-## Como usar
+## Aplicativo Windows (nova versão — janela única)
+
+Existe agora uma versão que não precisa de terminal nem de navegador separado:
+
+1. Instale pelo instalador (`Corretor CNA` no Menu Iniciar).
+2. Abra **Corretor CNA** e clique em **Iniciar correção**.
+3. Faça login no portal CNA **dentro da própria janela do aplicativo**. Nada é salvo: a sessão é descartada quando você fecha o programa.
+4. O programa coleta as atividades pendentes, monta os lotes e abre o painel na mesma janela.
+5. Copie os lotes, envie à sua IA, cole a resposta e clique em **Validar e receber retorno**.
+6. Ao final, o programa aplica e finaliza as atividades prontas no portal — e mostra o resumo.
+
+Tema claro/escuro automático do Windows, janela redimensionável, tudo em português.
+Detalhes técnicos: `docs/TAURI_ARQUITETURA.md`. A versão de terminal descrita abaixo
+continua funcionando em paralelo até a nova versão ser validada.
+
+## Como usar (versão de terminal)
 
 1. Abra `Corrigir.cmd`. O aplicativo abre o Chromium em uma sessão nova.
 2. Faça login manualmente no portal CNA. O programa reconhece a autenticação automaticamente.
@@ -156,7 +171,7 @@ Ela **nunca chega ao portal**. Entradas com problema ficam em `revisao.md` com o
 | Sem ref / ref incompleta | revisão manual (motivo registrado) |
 | Classificação ausente ou palavra desconhecida (`AGUARDANDO`, banana…) | revisão manual |
 | Score ausente, não numérico ou fora de 0–100 | revisão manual |
-| Score incoerente com a classificação (80+ Correto; 65–79 Parcial; <65 Incorreto) | revisão manual |
+| Score incoerente com a classificação (75+ Correto; 50–74 Parcial; <50 Incorreto) | revisão manual |
 | `Flag` ausente/inválida ou ainda `AGUARDANDO` | revisão manual |
 | `Flag` = IA/INJECAO/GIBBERISH com classificação ≠ INCORRETO ou Score ≠ 0 | revisão manual |
 | `Flag` = IA/INJECAO/GIBBERISH com `Revisão` = `NAO` | revisão manual |

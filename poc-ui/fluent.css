@@ -1,0 +1,230 @@
+/* ============================================================
+   Corretor CNA — Design System (Windows 11 / Fluent Design)
+   Tokens centralizados + componentes compartilhados.
+   Temas claro e escuro (prefers-color-scheme). Sem CDN, sem
+   fontes externas: Segoe UI Variable com fallback do sistema.
+   Mica/Acrylic nativos: quando indisponíveis, fallback sólido
+   (documentado em docs/ — sem blur simulado).
+   ============================================================ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Tipografia */
+  --fonte: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  --fonte-mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+
+  /* Raios (Fluent: controles 4px, superfícies 8px) */
+  --raio-controle: 4px;
+  --raio-superficie: 8px;
+
+  /* Alturas de controle */
+  --altura-controle: 32px;
+  --altura-controle-grande: 40px;
+
+  /* Espaçamento */
+  --espaco-1: 4px; --espaco-2: 8px; --espaco-3: 12px;
+  --espaco-4: 16px; --espaco-5: 24px; --espaco-6: 32px;
+
+  /* Sombras discretas (camadas) */
+  --sombra-2: 0 1px 2px rgba(0, 0, 0, .08), 0 0 1px rgba(0, 0, 0, .06);
+  --sombra-8: 0 4px 14px rgba(0, 0, 0, .10);
+
+  /* Velocidade de transição (respeita prefers-reduced-motion) */
+  --transicao: 120ms ease;
+}
+
+/* Tema claro (padrão Fluent) */
+:root, :root[data-tema="claro"] {
+  --fundo: #f3f3f3;              /* Mica fallback sólido */
+  --camada: #ffffff;
+  --camada-2: #fbfbfb;
+  --texto: #1a1a1a;
+  --texto-2: #5c5c5c;
+  --texto-3: #8a8a8a;
+  --borda: #e0e0e0;
+  --borda-forte: #cfcfcf;
+  --acento: #0f6157;             /* verde-petróleo CNA (identidade) */
+  --acento-forte: #0b4c44;
+  --acento-suave: #e8f3f0;
+  --acento-texto: #0b4c44;
+  --sucesso: #0f7b3c; --sucesso-suave: #eff7f1; --sucesso-borda: #cbe6d2;
+  --atencao: #8a5a12; --atencao-suave: #fff8ea; --atencao-borda: #f0dcb0;
+  --erro: #c42b1c;    --erro-suave: #fdf3f2;    --erro-borda: #f1cdc9;
+  --foco: #6fb3a9;
+  --barra: #e8e8e8;
+}
+
+/* Tema escuro */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    --fundo: #202020;
+    --camada: #2b2b2b;
+    --camada-2: #323232;
+    --texto: #ffffff;
+    --texto-2: #c8c8c8;
+    --texto-3: #9a9a9a;
+    --borda: #3d3d3d;
+    --borda-forte: #4d4d4d;
+    --acento: #4cc2b1;
+    --acento-forte: #5fd0bf;
+    --acento-suave: #123f39;
+    --acento-texto: #6fd3c3;
+    --sucesso: #6ccb5f; --sucesso-suave: #12290f; --sucesso-borda: #1f441c;
+    --atencao: #fcc02d; --atencao-suave: #2d2308; --atencao-borda: #4d3c10;
+    --erro: #ff998f;    --erro-suave: #2d1310;    --erro-borda: #522420;
+    --foco: #78d1c2;
+    --barra: #3a3a3a;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background: var(--fundo);
+  color: var(--texto);
+  font: 15px/1.55 var(--fonte);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: var(--acento-suave); }
+
+/* ---------- Botões (estados completos) ---------- */
+button, .file-button {
+  font-family: var(--fonte);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  min-height: var(--altura-controle);
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-controle);
+  background: var(--camada);
+  color: var(--texto);
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background var(--transicao), border-color var(--transicao);
+}
+button:hover:not(:disabled), .file-button:hover {
+  background: var(--camada-2);
+  border-color: var(--borda-forte);
+}
+button:active:not(:disabled) { background: var(--barra); color: var(--texto-2); }
+button.primario, button.primary {
+  background: var(--acento);
+  color: #fff;
+  border-color: transparent;
+}
+button.primario:hover:not(:disabled), button.primary:hover:not(:disabled) {
+  background: var(--acento-forte);
+}
+button.primario:active:not(:disabled), button.primary:active:not(:disabled) {
+  background: var(--acento-suave); color: var(--acento-texto);
+}
+button:disabled { opacity: .4; cursor: not-allowed; }
+button:focus-visible, .file-button:focus-visible,
+textarea:focus-visible, input:focus-visible, a:focus-visible {
+  outline: 2px solid var(--foco);
+  outline-offset: 2px;
+}
+
+/* ---------- Cartões e superfícies ---------- */
+.cartao, .entry {
+  background: var(--camada);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-superficie);
+  box-shadow: var(--sombra-2);
+  padding: var(--espaco-6);
+  max-width: 640px;
+}
+
+/* ---------- Alertas ---------- */
+.aviso {
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-superficie);
+  padding: 12px 16px;
+  font-size: 14px;
+  max-width: 640px;
+}
+.aviso.info { background: var(--acento-suave); color: var(--acento-texto); border-color: transparent; }
+.aviso.sucesso, .aviso.good { background: var(--sucesso-suave); color: var(--sucesso); border-color: var(--sucesso-borda); }
+.aviso.atencao, .aviso.warn { background: var(--atencao-suave); color: var(--atencao); border-color: var(--atencao-borda); }
+.aviso.erro, .aviso.bad { background: var(--erro-suave); color: var(--erro); border-color: var(--erro-borda); }
+
+/* ---------- Progresso indeterminado (barra Fluent) ---------- */
+.progresso-indeterminado {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--barra);
+  overflow: hidden;
+  position: relative;
+}
+.progresso-indeterminado::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 40%;
+  border-radius: 999px;
+  background: var(--acento);
+  animation: deslizar 1.6s ease-in-out infinite;
+}
+@keyframes deslizar {
+  0% { left: -40%; } 100% { left: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progresso-indeterminado::after { animation: none; left: 30%; }
+  * { transition: none !important; }
+}
+
+/* ---------- Etapas ---------- */
+.etapas { list-style: none; margin: 0; padding: 0; }
+.etapas li {
+  display: flex; align-items: center; gap: var(--espaco-3);
+  padding: var(--espaco-2) 0;
+  color: var(--texto-3);
+}
+.etapas li.pronta { color: var(--texto); }
+.etapas li.ativa { color: var(--acento-texto); font-weight: 600; }
+.etapa-icone {
+  display: inline-grid; place-items: center;
+  width: 22px; height: 22px;
+  border: 1px solid var(--borda-forte);
+  border-radius: 50%;
+  font-size: 12px; font-weight: 700;
+  flex: none;
+}
+.etapas li.pronta .etapa-icone { background: var(--sucesso-suave); border-color: var(--sucesso-borda); color: var(--sucesso); }
+.etapas li.ativa .etapa-icone { border-color: var(--acento); }
+
+/* ---------- Métricas ---------- */
+.metricas { display: flex; gap: var(--espaco-3); flex-wrap: wrap; }
+.metrica {
+  background: var(--camada);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-superficie);
+  box-shadow: var(--sombra-2);
+  padding: var(--espaco-4);
+  display: flex; align-items: baseline; gap: 10px;
+  min-width: 150px;
+}
+.metrica strong { font-size: 26px; line-height: 1; font-variant-numeric: tabular-nums; }
+.metrica span { font-size: 13px; color: var(--texto-2); }
+
+/* ---------- Texto ---------- */
+.secundario { color: var(--texto-2); font-size: 14px; }
+h1 { font-size: clamp(22px, 2.4vw, 28px); line-height: 1.25; margin: 0 0 var(--espaco-2); letter-spacing: -.01em; }
+h2 { font-size: 17px; margin: 0 0 var(--espaco-2); }
+a { color: var(--acento-texto); }
+
+/* ---------- Barra superior do app ---------- */
+.topo { display: flex; align-items: center; gap: var(--espaco-3); }
+.marca {
+  display: grid; place-items: center;
+  width: 40px; height: 40px;
+  background: var(--acento);
+  border-radius: var(--raio-superficie);
+  flex: none;
+}
+.titulo-app { font-weight: 700; font-size: 15px; }
+.subtitulo-app { font-size: 13px; color: var(--texto-2); }
+
+.hidden { display: none !important; }
