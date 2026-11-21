@@ -90,13 +90,18 @@ test('revisão manual é exportada para a pasta de resultados do professor', asy
   const dir = runDirFicticia();
   let exportado = null;
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'cna-resultados-'));
-  const g = criarGerenciador({
-    runDir: dir,
-    exportarResultados: () => { exportado = pasta; },
-    sair: () => {},
-  });
-  await g.encerrar();
-  assert.equal(exportado, pasta, 'exportação executada antes da remoção');
+  try {
+    const g = criarGerenciador({
+      runDir: dir,
+      exportarResultados: () => { exportado = pasta; },
+      sair: () => {},
+    });
+    await g.encerrar();
+    assert.equal(exportado, pasta, 'exportação executada antes da remoção');
+  } finally {
+    // O teste só verifica a chamada; a pasta fictícia é removida após a asserção.
+    fs.rmSync(pasta, { recursive: true, force: true });
+  }
 });
 
 test('limpeza de residuais preserva execução ativa e remove abandonada', () => {

@@ -53,6 +53,7 @@ test('servidor de telas: HTML e CSS com CSP; rota desconhecida 404', async () =>
 
 test('painel: HTML com CSP, script externo no mesmo token, sem script inline', async () => {
   const run = fs.mkdtempSync(path.join(os.tmpdir(), 'cna-csp-'));
+  try {
   const fixture = writeFixture(run);
   const panel = await createPanel({ collection: fixture.collection, lotesDir: run, returnsDir: run });
   try {
@@ -73,6 +74,7 @@ test('painel: HTML com CSP, script externo no mesmo token, sem script inline', a
     assert.equal(fora.status, 404, 'rota fora do token é rejeitada');
   } finally {
     await panel.close();
+    fs.rmSync(run, { recursive: true, force: true });
   }
 });
 
