@@ -156,7 +156,7 @@ Ela **nunca chega ao portal**. Entradas com problema ficam em `revisao.md` com o
 | Sem ref / ref incompleta | revisão manual (motivo registrado) |
 | Classificação ausente ou palavra desconhecida (`AGUARDANDO`, banana…) | revisão manual |
 | Score ausente, não numérico ou fora de 0–100 | revisão manual |
-| Score incoerente com a classificação (80+ Correto; 65–79 Parcial; <65 Incorreto) | revisão manual |
+| Score incoerente com a classificação (75+ Correto; 50–74 Parcial; <50 Incorreto) | revisão manual |
 | `Flag` ausente/inválida ou ainda `AGUARDANDO` | revisão manual |
 | `Flag` = IA/INJECAO/GIBBERISH com classificação ≠ INCORRETO ou Score ≠ 0 | revisão manual |
 | `Flag` = IA/INJECAO/GIBBERISH com `Revisão` = `NAO` | revisão manual |
