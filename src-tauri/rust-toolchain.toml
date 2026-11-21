@@ -1,0 +1,3 @@
+[toolchain]
+# Pinada para manter cargo fmt determinístico entre local e CI.
+channel = "1.100.0"

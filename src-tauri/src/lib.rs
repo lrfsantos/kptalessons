@@ -84,7 +84,10 @@ fn cleanup_stale_profiles(own: &Path) {
 fn wait_cdp_port(profile: &Path, timeout: Duration) -> Result<u16, String> {
     // O WebView2 cria uma subpasta EBWebView dentro da pasta de dados;
     // o arquivo pode ficar em <perfil>/DevToolsActivePort ou <perfil>/EBWebView/DevToolsActivePort.
-    let candidates = [profile.join("DevToolsActivePort"), profile.join("EBWebView").join("DevToolsActivePort")];
+    let candidates = [
+        profile.join("DevToolsActivePort"),
+        profile.join("EBWebView").join("DevToolsActivePort"),
+    ];
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
         for file in candidates.iter() {
@@ -332,27 +335,60 @@ mod tests {
     #[test]
     fn origem_tauri_permitida() {
         let p = ports(&[]);
-        assert!(allowed_url(&Url::parse("tauri://localhost/index.html").unwrap(), &p));
-        assert!(allowed_url(&Url::parse("http://tauri.localhost/index.html").unwrap(), &p));
+        assert!(allowed_url(
+            &Url::parse("tauri://localhost/index.html").unwrap(),
+            &p
+        ));
+        assert!(allowed_url(
+            &Url::parse("http://tauri.localhost/index.html").unwrap(),
+            &p
+        ));
     }
 
     #[test]
     fn servidor_local_somente_porta_anunciada() {
         let p = ports(&[51234]);
-        assert!(allowed_url(&Url::parse("http://127.0.0.1:51234/painel/abc/").unwrap(), &p));
-        assert!(!allowed_url(&Url::parse("http://127.0.0.1:9999/").unwrap(), &p));
-        assert!(!allowed_url(&Url::parse("http://localhost:51234/").unwrap(), &p));
-        assert!(!allowed_url(&Url::parse("http://192.168.0.10:51234/").unwrap(), &p));
+        assert!(allowed_url(
+            &Url::parse("http://127.0.0.1:51234/painel/abc/").unwrap(),
+            &p
+        ));
+        assert!(!allowed_url(
+            &Url::parse("http://127.0.0.1:9999/").unwrap(),
+            &p
+        ));
+        assert!(!allowed_url(
+            &Url::parse("http://localhost:51234/").unwrap(),
+            &p
+        ));
+        assert!(!allowed_url(
+            &Url::parse("http://192.168.0.10:51234/").unwrap(),
+            &p
+        ));
     }
 
     #[test]
     fn portal_cna_somente_https_porta_padrao() {
         let p = ports(&[]);
-        assert!(allowed_url(&Url::parse("https://app.cna.com.br/login").unwrap(), &p));
-        assert!(!allowed_url(&Url::parse("http://app.cna.com.br/login").unwrap(), &p));
-        assert!(!allowed_url(&Url::parse("https://app.cna.com.br:8443/login").unwrap(), &p));
-        assert!(!allowed_url(&Url::parse("https://malicioso.cna.com.br/login").unwrap(), &p));
-        assert!(!allowed_url(&Url::parse("https://evil.example/").unwrap(), &p));
+        assert!(allowed_url(
+            &Url::parse("https://app.cna.com.br/login").unwrap(),
+            &p
+        ));
+        assert!(!allowed_url(
+            &Url::parse("http://app.cna.com.br/login").unwrap(),
+            &p
+        ));
+        assert!(!allowed_url(
+            &Url::parse("https://app.cna.com.br:8443/login").unwrap(),
+            &p
+        ));
+        assert!(!allowed_url(
+            &Url::parse("https://malicioso.cna.com.br/login").unwrap(),
+            &p
+        ));
+        assert!(!allowed_url(
+            &Url::parse("https://evil.example/").unwrap(),
+            &p
+        ));
     }
 }
 
