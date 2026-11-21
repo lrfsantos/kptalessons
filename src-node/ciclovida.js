@@ -61,11 +61,9 @@ function criarGerenciador({ runDir, exportarResultados = null, sair = process.ex
       const prazofinal = inicio + tetoMs;
       execucao = (async () => {
         // Prazo GLOBAL: criado AGORA, cobre recursos iniciais, tardios e a
-        // exportação. unref: o processo nunca fica preso só pelo timer.
-        const teto = new Promise(resolve => {
-          const t = setTimeout(resolve, tetoMs);
-          if (t.unref) t.unref();
-        });
+        // exportação. SEM unref: com uma rotina eterna ele é o único handle
+        // do loop — unref drenaria o event loop antes do prazo disparar.
+        const teto = new Promise(resolve => setTimeout(resolve, tetoMs));
         // 1. Encerra recursos registrados ANTES do início, sob o prazo global.
         await drenar(teto);
         // 2. Janela controlada para registros tardios: cada aoEncerrar acorda
