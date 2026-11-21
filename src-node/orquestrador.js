@@ -29,6 +29,7 @@ const { performLogin } = require(path.join(BASE, 'login.js'));
 const { collectActivities } = require(path.join(BASE, 'scraper.js'));
 const { applyAcceptedCorrections } = require(path.join(BASE, 'executor.js'));
 const { criarGerenciador, fecharServidor, limparExecucoesAbandonadas } = require(path.join(__dirname, 'ciclovida.js'));
+const { irPara } = require(path.join(__dirname, 'navegacao.js'));
 
 // Dados da execução em %TEMP%: em produção resources/ é somente leitura.
 // DIRETÓRIO SENSÍVEL: contém respostas dos alunos (answers.json), lotes,
@@ -150,10 +151,6 @@ function registrarBarra(page) {
   });
 }
 
-async function irPara(page, destino) {
-  await page.goto(destino, { waitUntil: 'domcontentloaded' }).catch(() => {});
-}
-
 // --- fluxo completo -----------------------------------------------------
 async function rodarFluxo(demoPort) {
   const demoBase = `http://127.0.0.1:${demoPort}`;
@@ -180,14 +177,15 @@ async function rodarFluxo(demoPort) {
 
   if (coleta.status === 'EMPTY') {
     await barraEstado(page, '');
-    await irPara(page, demoBase + '/conclusao?modo=vazio');
+    // Falha de navegação não vira sucesso: sem conclusão carregada, não emite COMPLETED.
+    if (!await irPara(page, 'conclusao', demoBase + '/conclusao?modo=vazio', evento)) return;
     evento('COLLECTION_COMPLETED', { atividades: 0, lotes: 0 });
     return;
   }
   if (coleta.status === 'CAPTURE_FAILED') {
     await barraEstado(page, '');
-    await irPara(page, demoBase + '/conclusao?erro=' + encodeURIComponent(
-      'Havia atividades pendentes, mas nenhuma pôde ser capturada. Feche o aplicativo e tente novamente.'));
+    if (!await irPara(page, 'conclusao', demoBase + '/conclusao?erro=' + encodeURIComponent(
+      'Havia atividades pendentes, mas nenhuma pôde ser capturada. Feche o aplicativo e tente novamente.'), evento)) return;
     evento('APPLICATION_FAILED', { etapa: 'coleta' });
     return;
   }
@@ -206,7 +204,12 @@ async function rodarFluxo(demoPort) {
   console.log('CNA_PORTS ' + JSON.stringify({ telasPort: demoPort, painelPort, painelPath }));
   evento('PANEL_READY', { lotes: coleta.collection.batches.length, atividades: coleta.collection.batches.reduce((n, b) => n + b.total, 0) });
   await barraEstado(page, '');
-  await irPara(page, panel.url);
+  // Painel não carregou: estado estruturado + fluxo termina com falha
+  // (a aplicação NUNCA fica esperando indefinidamente por página ausente).
+  if (!await irPara(page, 'painel', panel.url, evento)) {
+    evento('APPLICATION_FAILED', { etapa: 'painel' });
+    return;
+  }
 
   // 5. Professor copia lotes → IA (fora do app) → cola retorno → valida.
   //    O painel aceita/rejeita com o parser real e grava retornos-da-IA.
@@ -236,7 +239,11 @@ async function rodarFluxo(demoPort) {
     falhas: String(stats.falhasFinalizacao),
   });
   if (pasta) params.set('pasta', pasta);
-  await irPara(page, demoBase + '/conclusao?' + params.toString());
+  // Falha ao mostrar a conclusão não vira sucesso: sem APPLICATION_COMPLETED.
+  if (!await irPara(page, 'conclusao', demoBase + '/conclusao?' + params.toString(), evento)) {
+    evento('APPLICATION_FAILED', { etapa: 'conclusao' });
+    return;
+  }
   log('fluxo-concluido', { finalizadas: stats.finalizadasNestaExecucao, revisao: stats.revisaoManual });
   evento('APPLICATION_COMPLETED', {
     finalizadas: stats.finalizadasNestaExecucao,
@@ -266,8 +273,8 @@ server.listen(0, '127.0.0.1', async () => {
     evento('APPLICATION_FAILED', { etapa: 'fluxo' });
     try {
       const { page } = await primeiroProcessoWeb(await conectar(CDP_PORT));
-      await irPara(page, `http://127.0.0.1:${demoPort}/conclusao?erro=` + encodeURIComponent(
-        'Algo inesperado interrompeu o fluxo. Feche o aplicativo e tente novamente.'));
+      if (!await irPara(page, 'conclusao', `http://127.0.0.1:${demoPort}/conclusao?erro=` + encodeURIComponent(
+        'Algo inesperado interrompeu o fluxo. Feche o aplicativo e tente novamente.'), evento)) return;
     } catch { /* janela já fechada */ }
   }
 });
