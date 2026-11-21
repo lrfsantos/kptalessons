@@ -2,7 +2,7 @@
 # Copia para src-tauri/resources/: node.exe, src-node/, lib/, ui/painel.html,
 # node_modules/playwright-core/. Nao inclui navegador nenhum.
 param(
-  [string]$NodeExe = "C:\Users\luiza\Desktop\corretor cna\runtime\node\node.exe"
+  [string]$NodeExe = (Join-Path $PSScriptRoot '..\src-tauri\target\release\resources\node.exe')
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
