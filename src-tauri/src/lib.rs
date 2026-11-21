@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use tauri::{Emitter, Manager, RunEvent, State, Url, WebviewUrl, WebviewWindowBuilder};
@@ -29,6 +29,46 @@ struct SidecarState {
     /// Motivo do fim da geração ATUAL do sidecar (por spawn, não global): um
     /// EOF tardio da geração anterior não pode silenciar a queda da nova.
     fim_sidecar: Mutex<Option<Arc<AtomicU8>>>,
+    /// Handshake da geração ATUAL: o comando de reinício só resolve quando o
+    /// NOVO sidecar confirma CNA_SIDECAR_READY + CNA_CDP_CONECTADO (rodada 6,
+    /// item 2). Um sinal por geração evita flags obsoletas do processo anterior.
+    handshake: Mutex<Arc<HandshakeSinal>>,
+}
+
+/// Estado do handshake real do sidecar (pronto + CDP conectado).
+#[derive(Default)]
+struct Handshake {
+    sidecar_pronto: bool,
+    cdp_conectado: bool,
+    encerrou: bool,
+}
+
+struct HandshakeSinal {
+    estado: Mutex<Handshake>,
+    mudou: Condvar,
+}
+
+/// Aguarda o handshake real com timeout controlado. Falha se o processo
+/// encerrar antes de ficar pronto ou se o timeout expirar — nesse caso o
+/// invoke NÃO resolve e o overlay de recuperação permanece na tela.
+fn aguardar_handshake(sinal: &Arc<HandshakeSinal>, timeout: Duration) -> Result<(), String> {
+    let deadline = Instant::now() + timeout;
+    let mut estado = sinal.estado.lock().map_err(|e| e.to_string())?;
+    while !(estado.sidecar_pronto && estado.cdp_conectado) {
+        if estado.encerrou {
+            return Err("sidecar encerrou antes de completar o handshake".into());
+        }
+        let restante = match deadline.checked_duration_since(Instant::now()) {
+            Some(d) => d,
+            None => return Err("timeout aguardando o handshake do sidecar".into()),
+        };
+        let (novo, _) = sinal
+            .mudou
+            .wait_timeout(estado, restante)
+            .map_err(|e| e.to_string())?;
+        estado = novo;
+    }
+    Ok(())
 }
 
 // Motivo do fim registrado ANTES de encerrar o processo (shutdown/kill).
@@ -300,6 +340,7 @@ fn watch_sidecar_stdout(
     child: &mut Child,
     origens: Arc<OrigensLocais>,
     fim: Arc<AtomicU8>,
+    handshake: Arc<HandshakeSinal>,
 ) {
     drenar_stderr(child);
     let Some(stdout) = child.stdout.take() else {
@@ -311,6 +352,10 @@ fn watch_sidecar_stdout(
             let Ok(line) = line else { break };
             if let Some(rest) = line.strip_prefix("CNA_SIDECAR_READY ") {
                 pronto = true;
+                if let Ok(mut h) = handshake.estado.lock() {
+                    h.sidecar_pronto = true;
+                }
+                handshake.mudou.notify_all();
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(rest) {
                     if let Some(p) = v["demoPort"].as_u64() {
                         origens.telas_ports.lock().unwrap().insert(p as u16);
@@ -318,6 +363,10 @@ fn watch_sidecar_stdout(
                     let _ = app.emit("app-estado", ("SIDECAR_PRONTO", rest));
                 }
             } else if line.starts_with("CNA_CDP_CONECTADO") {
+                if let Ok(mut h) = handshake.estado.lock() {
+                    h.cdp_conectado = true;
+                }
+                handshake.mudou.notify_all();
                 let _ = app.emit("app-estado", ("WEBVIEW2_CONECTADO", "{}"));
             } else if let Some(rest) = line.strip_prefix("CNA_PORTS ") {
                 // Origens anunciadas depois do handshake: telas + painel (porta e token).
@@ -340,6 +389,12 @@ fn watch_sidecar_stdout(
             }
             // Outras linhas: log técnico do node — não encaminhadas à UI (privacidade).
         }
+        // Acorda quem aguarda o handshake: um EOF antes de pronto é falha de
+        // inicialização/recuperação e NÃO pode deixar o invoke pendurado.
+        if let Ok(mut h) = handshake.estado.lock() {
+            h.encerrou = true;
+        }
+        handshake.mudou.notify_all();
         // EOF intencional (shutdown ou reinício, inclusive após kill por
         // timeout) NÃO é falha: nenhum overlay é injetado.
         let Some(estado) = estado_no_eof(pronto, fim.load(Ordering::SeqCst)) else {
@@ -455,14 +510,36 @@ fn iniciar_sidecar(
     if let Ok(mut g) = state.fim_sidecar.lock() {
         *g = Some(fim.clone());
     }
+    // Sinal de handshake desta geração: o overlay de recuperação só sai quando
+    // o NOVO processo confirmar pronto + CDP (rodada 6, item 2).
+    let handshake = Arc::new(HandshakeSinal {
+        estado: Mutex::new(Handshake::default()),
+        mudou: Condvar::new(),
+    });
+    if let Ok(mut g) = state.handshake.lock() {
+        *g = handshake.clone();
+    }
     let cdp_port = wait_cdp_port(&state.profile_dir, Duration::from_secs(30))?;
     let (mut child, stdin) = spawn_sidecar(base, cdp_port)?;
-    watch_sidecar_stdout(app.clone(), &mut child, state.origens.clone(), fim);
+    watch_sidecar_stdout(
+        app.clone(),
+        &mut child,
+        state.origens.clone(),
+        fim,
+        handshake.clone(),
+    );
     if let Ok(mut g) = state.child.lock() {
         *g = Some(child);
     }
     if let Ok(mut g) = state.stdin.lock() {
         *g = Some(stdin);
+    }
+    // Só resolve Ok(()) após o handshake REAL; se falhar, interrompe o novo
+    // processo sem overlay falso (EOF marcado como reinício) e devolve Err —
+    // o invoke rejeita e a UI mantém a mensagem de falha de recuperação.
+    if let Err(e) = aguardar_handshake(&handshake, Duration::from_secs(30)) {
+        parar_sidecar(state, FIM_REINICIACAO);
+        return Err(e);
     }
     Ok(())
 }
@@ -628,6 +705,66 @@ mod tests {
         );
     }
 
+    // ---- Rodada 6, item 2: handshake real antes de resolver o invoke ----
+
+    fn sinal_novo() -> Arc<HandshakeSinal> {
+        Arc::new(HandshakeSinal {
+            estado: Mutex::new(Handshake::default()),
+            mudou: Condvar::new(),
+        })
+    }
+
+    #[test]
+    fn reinicio_so_resolve_apos_pronto_e_cdp() {
+        let sinal = sinal_novo();
+        let outro = sinal.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(20));
+            outro.estado.lock().unwrap().sidecar_pronto = true;
+            outro.mudou.notify_all();
+            // Só pronto NÃO basta: precisa da conexão CDP.
+            std::thread::sleep(Duration::from_millis(20));
+            outro.estado.lock().unwrap().cdp_conectado = true;
+            outro.mudou.notify_all();
+        });
+        let t0 = Instant::now();
+        aguardar_handshake(&sinal, Duration::from_secs(2)).expect("handshake completo");
+        assert!(
+            t0.elapsed() >= Duration::from_millis(35),
+            "aguardou pronto + CDP, não resolveu no pronto"
+        );
+    }
+
+    #[test]
+    fn handshake_falha_rapido_se_o_novo_processo_encerra() {
+        let sinal = sinal_novo();
+        let outro = sinal.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(10));
+            outro.estado.lock().unwrap().encerrou = true;
+            outro.mudou.notify_all();
+        });
+        let t0 = Instant::now();
+        assert!(aguardar_handshake(&sinal, Duration::from_secs(2)).is_err());
+        assert!(
+            t0.elapsed() < Duration::from_millis(800),
+            "falhou no EOF, não ficou pendurado até o timeout"
+        );
+    }
+
+    #[test]
+    fn handshake_tem_timeout_controlado() {
+        let sinal = sinal_novo();
+        let t0 = Instant::now();
+        assert!(aguardar_handshake(&sinal, Duration::from_millis(120)).is_err());
+        let gasto = t0.elapsed();
+        assert!(gasto >= Duration::from_millis(100));
+        assert!(
+            gasto < Duration::from_secs(2),
+            "timeout controlado, não pendurado"
+        );
+    }
+
     // ---- Item 2 (rodada 4): falha global centralizada em qualquer tela ---
 
     #[test]
@@ -689,6 +826,10 @@ pub fn run() {
             profile_dir: profile.clone(),
             origens: local_ports.clone(),
             fim_sidecar: Mutex::new(None),
+            handshake: Mutex::new(Arc::new(HandshakeSinal {
+                estado: Mutex::new(Handshake::default()),
+                mudou: Condvar::new(),
+            })),
         })
         .setup(move |app| {
             let base = if cfg!(debug_assertions) {

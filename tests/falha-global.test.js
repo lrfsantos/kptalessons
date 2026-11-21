@@ -140,6 +140,38 @@ test('recuperação segura COM IPC: invoca reiniciar_sidecar e remove o overlay'
   assert.equal(documento.getElementById('cna-falha-global'), null, 'overlay removido após reinício');
 });
 
+test('recuperação só libera a página quando o invoke resolve (handshake real confirmado no Rust)', async () => {
+  let liberar;
+  const pendente = new Promise(r => { liberar = r; });
+  const tauri = { core: { invoke: () => pendente } };
+  const { documento } = executarOverlay({ tela: 'aplicacao', tauri });
+  const overlay = documento.getElementById('cna-falha-global');
+  let botao = null;
+  const acha = el => { if (el.tag === 'button') botao = el; el.children.forEach(acha); };
+  acha(overlay);
+  botao.clicar(); // invoke ainda pendente: o Rust ainda não confirmou o handshake
+  await new Promise(r => setImmediate(r));
+  assert.ok(documento.getElementById('cna-falha-global'), 'overlay permanece até o handshake real');
+  assert.equal(botao.disabled, true, 'recuperação em curso: botão desabilitado');
+  liberar(); // Rust confirmou CNA_SIDECAR_READY + CDP -> invoke resolve
+  await new Promise(r => setImmediate(r));
+  assert.equal(documento.getElementById('cna-falha-global'), null, 'overlay removido só após a confirmação');
+});
+
+test('recuperação com falha no invoke mantém overlay e mensagem de falha', async () => {
+  const tauri = { core: { invoke: () => Promise.reject(new Error('handshake falhou')) } };
+  const { documento } = executarOverlay({ tela: 'inicial', tauri });
+  const overlay = documento.getElementById('cna-falha-global');
+  let botao = null;
+  const acha = el => { if (el.tag === 'button') botao = el; el.children.forEach(acha); };
+  acha(overlay);
+  botao.clicar();
+  await new Promise(r => setImmediate(r));
+  assert.ok(documento.getElementById('cna-falha-global'), 'overlay NÃO é removido quando a recuperação falha');
+  assert.equal(botao.disabled, false, 'botão reabilitado para nova tentativa');
+  assert.match(botao.textContent, /Não foi possível reiniciar/, 'mensagem de falha de recuperação mantida');
+});
+
 test('recuperação SEM IPC (portal remoto): orientação segura, sem segundo sidecar', async () => {
   const { documento } = executarOverlay({ tela: 'portal', tauri: null });
   const overlay = documento.getElementById('cna-falha-global');
