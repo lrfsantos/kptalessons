@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { criarGerenciador, fecharServidor, limparExecucoesAbandonadas } = require('../src-node/ciclovida');
+const { execFile } = require('node:child_process');
 const http = require('http');
 
 function runDirFicticia() {
@@ -301,4 +302,56 @@ test('limpeza do diretório ocorre mesmo com rotina falha + exportação falha +
   g.aoEncerrar(() => new Promise(() => {})); // eterna
   await g.encerrar();
   assert.equal(fs.existsSync(dir), false, 'runDir removida apesar de todas as falhas');
+});
+
+// ---- Rodada 5, item 4: clearTimeout do prazo + estados da fila tardia ------
+
+test('timer do prazo é limpo: encerramento concluído não prende o event loop', async () => {
+  const dir = runDirFicticia();
+  const modulo = JSON.stringify(path.join(__dirname, '..', 'src-node', 'ciclovida.js'));
+  const runDir = JSON.stringify(dir);
+  const script = `const {criarGerenciador}=require(${modulo}); ` +
+    `const g=criarGerenciador({runDir:${runDir},sair:()=>{},tetoMs:60000,janelaTardiasMs:1}); ` +
+    `g.aoEncerrar(()=>{}); g.encerrar();`;
+  // Sem clearTimeout, o timer de 60s manteria o processo filho vivo e o
+  // timeout abaixo estouraria (o teste falharia por hanging, não por sorte).
+  await new Promise((resolve, reject) => {
+    execFile(process.execPath, ['-e', script], { timeout: 8000 }, err => err ? reject(err) : resolve());
+  });
+  assert.equal(fs.existsSync(dir), false);
+});
+
+test('fila tardia tem estados explícitos: aberta → encerrando → fechada', async () => {
+  const dir = runDirFicticia();
+  const g = criarGerenciador({ runDir: dir, sair: () => {}, janelaTardiasMs: 30 });
+  assert.equal(g.estadoFila, 'aberta');
+  let vistoNaRotina = null;
+  g.aoEncerrar(() => { vistoNaRotina = g.estadoFila; });
+  await g.encerrar();
+  assert.equal(vistoNaRotina, 'encerrando', 'durante a drenagem a fila ainda aceita tardias');
+  assert.equal(g.estadoFila, 'fechada', 'após a janela a fila está formalmente fechada');
+});
+
+test('registro após o fechamento da fila: política explícita (não fica sem destino)', async () => {
+  const dir = runDirFicticia();
+  const g = criarGerenciador({ runDir: dir, sair: () => {}, janelaTardiasMs: 1 });
+  await g.encerrar();
+  assert.equal(g.estadoFila, 'fechada');
+  let executou = false;
+  const avisos = [];
+  const erroOriginal = console.error;
+  console.error = msg => avisos.push(msg);
+  try { g.aoEncerrar(() => { executou = true; }); }
+  finally { console.error = erroOriginal; }
+  await new Promise(r => setTimeout(r, 20));
+  assert.equal(executou, false, 'rotina pós-janela não é enfileirada sem execução');
+  assert.match(avisos.join(' '), /após fechamento da fila/, 'comportamento documentado no log');
+});
+
+test('prazo esgotado é um estado distinto quando a rotina nunca termina', async () => {
+  const dir = runDirFicticia();
+  const g = criarGerenciador({ runDir: dir, sair: () => {}, tetoMs: 100 });
+  g.aoEncerrar(() => new Promise(() => {}));
+  await g.encerrar();
+  assert.equal(g.estadoFila, 'prazo-esgotado');
 });

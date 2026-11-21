@@ -33,6 +33,8 @@ function criarGerenciador({ runDir, exportarResultados = null, sair = process.ex
   const rotinas = []; // encerramentos de recursos registrados (servidores, painel, CDP...)
   let encerrando = false;
   let acordar = null; // sinaliza chegada de rotina tardia ao drenador
+  // Estados explícitos da fila: aberta -> encerrando -> fechada -> prazo-esgotado.
+  let estadoFila = 'aberta';
 
   // Executa cada rotina sob o prazo global; rotina lenta/eterna NUNCA trava
   // a limpeza (a Promise pendente é abandonada — o sair() encerra o processo).
@@ -50,6 +52,12 @@ function criarGerenciador({ runDir, exportarResultados = null, sair = process.ex
      *  ticks nem de Promise.resolve()). */
     aoEncerrar(fn) {
       if (typeof fn !== 'function') return;
+      if (estadoFila === 'fechada' || estadoFila === 'prazo-esgotado') {
+        // Política do registro tardio pós-janela: NÃO entra na fila (ficaria
+        // sem destino) — o processo está saindo; aviso explícito no log.
+        console.error('[ciclovida] rotina tardia após fechamento da fila de encerramento: ignorada');
+        return;
+      }
       rotinas.push(fn);
       if (encerrando && acordar) acordar();
     },
@@ -57,13 +65,17 @@ function criarGerenciador({ runDir, exportarResultados = null, sair = process.ex
     encerrar(codigo = 0) {
       if (execucao) return execucao;
       encerrando = true;
+      estadoFila = 'encerrando';
       const inicio = Date.now();
       const prazofinal = inicio + tetoMs;
       execucao = (async () => {
         // Prazo GLOBAL: criado AGORA, cobre recursos iniciais, tardios e a
         // exportação. SEM unref: com uma rotina eterna ele é o único handle
         // do loop — unref drenaria o event loop antes do prazo disparar.
-        const teto = new Promise(resolve => setTimeout(resolve, tetoMs));
+        let idTeto = null;
+        const teto = new Promise(resolve => {
+          idTeto = setTimeout(() => { estadoFila = 'prazo-esgotado'; resolve(); }, tetoMs);
+        });
         // 1. Encerra recursos registrados ANTES do início, sob o prazo global.
         await drenar(teto);
         // 2. Janela controlada para registros tardios: cada aoEncerrar acorda
@@ -76,6 +88,7 @@ function criarGerenciador({ runDir, exportarResultados = null, sair = process.ex
           acordar = null;
           await drenar(teto);
         }
+        if (estadoFila === 'encerrando') estadoFila = 'fechada'; // fila de tardios encerrada
         // 3. Exporta apenas o que precisa sobreviver — AGUARDADA, dentro do
         //    mesmo prazo; 4. remove dados sensíveis depois da exportação
         //    (ou do prazo, se ela estourar).
@@ -84,11 +97,15 @@ function criarGerenciador({ runDir, exportarResultados = null, sair = process.ex
         }
         try { fs.rmSync(runDir, { recursive: true, force: true }); } catch { /* melhor esforço */ }
         // 5. Sai somente depois da limpeza concluída (ou prazo); sem exit antecipado.
+        // O prazo não precisa mais rondar o event loop: limpá-lo evita que a
+        // conclusão antes do teto mantenha o processo vivo à toa.
+        clearTimeout(idTeto);
         sair(codigo);
       })();
       return execucao;
     },
     get encerrado() { return execucao !== null; },
+    get estadoFila() { return estadoFila; },
   };
 }
 
