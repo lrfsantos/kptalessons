@@ -28,15 +28,22 @@
   cartao.appendChild(texto);
   cartao.appendChild(dica);
 
+  // Rodada 5, item 1: bloqueio COMPLETO em captura — clique, teclado (Enter/
+  // Espaço em elemento já focado), submit e interações sem clique convencional.
+  var BLOQUEADOS = ['click', 'auxclick', 'contextmenu', 'dblclick', 'mousedown', 'mouseup',
+    'pointerdown', 'pointerup', 'touchstart', 'touchend', 'keydown', 'keypress', 'keyup', 'submit'];
+
   function bloquear(e) {
-    if (overlay.contains(e.target)) return; // botões do próprio overlay funcionam
+    if (overlay.contains(e.target)) return; // controles do próprio overlay funcionam
     e.preventDefault();
     e.stopPropagation();
   }
-  document.addEventListener('click', bloquear, true); // página por baixo não responde
+
+  var restaurar = []; // elementos tornados inert (interação só volta na recuperação)
 
   function fecharOverlay() {
-    document.removeEventListener('click', bloquear, true);
+    BLOQUEADOS.forEach(function (ev) { document.removeEventListener(ev, bloquear, true); });
+    restaurar.forEach(function (el) { try { el.inert = false; } catch (_) {} });
     overlay.remove();
   }
   var acao = document.createElement('button');
@@ -59,5 +66,16 @@
   });
   cartao.appendChild(acao);
   overlay.appendChild(cartao);
-  (document.body || document.documentElement).appendChild(overlay);
+  var raiz = document.body || document.documentElement;
+  raiz.appendChild(overlay);
+
+  // inert por baixo: sem foco nem ativação por teclado/leitor de tela, além
+  // do bloqueio em captura (defesa em profundidade).
+  var filhos = raiz.children || [];
+  for (var i = 0; i < filhos.length; i++) {
+    var el = filhos[i];
+    if (el === overlay || overlay.contains(el)) continue;
+    try { el.inert = true; restaurar.push(el); } catch (_) {}
+  }
+  BLOQUEADOS.forEach(function (ev) { document.addEventListener(ev, bloquear, true); });
 })();

@@ -77,6 +77,19 @@ function executarOverlay({ tela, mensagem = MENSAGEM, tauri = null } = {}) {
   return { documento, body, pagina };
 }
 
+// Disparo comportamental: captura no document roda ANTES dos handlers do alvo;
+// stopPropagation impede que o handler da página por baixo seja chamado.
+function disparar(documento, tipo, alvo) {
+  const ev = {
+    type: tipo, target: alvo, previsto: false, parado: false,
+    preventDefault() { this.previsto = true; },
+    stopPropagation() { this.parado = true; },
+  };
+  for (const fn of documento.listeners[tipo] || []) fn(ev);
+  if (!ev.parado) for (const fn of (alvo.listeners && alvo.listeners[tipo]) || []) fn(ev);
+  return ev;
+}
+
 // As 6 telas do fluxo: a queda pode acontecer em qualquer uma.
 const TELAS = ['inicial', 'portal', 'coleta', 'painel', 'aplicacao', 'conclusao'];
 
@@ -147,6 +160,67 @@ test('cliques dentro do overlay funcionam; fora são bloqueados', () => {
   const dentro = { prev: false };
   documento.listeners.click[0]({ target: overlay, preventDefault() { dentro.prev = true; }, stopPropagation() {} });
   assert.ok(!dentro.prev, 'clique no próprio overlay não é bloqueado');
+});
+
+// ---- Rodada 5, item 1: bloqueio por COMPORTAÇÃO (não só presença no DOM) --
+
+test('teclado em elemento focado por baixo do overlay não dispara ação', () => {
+  const { documento, pagina } = executarOverlay({ tela: 'portal' });
+  let acao = 0;
+  let tecla = 0;
+  const botaoFocado = criarElemento('button'); // ex.: "Finalizar" já focado
+  botaoFocado.addEventListener('click', () => { acao++; });
+  botaoFocado.addEventListener('keydown', () => { tecla++; });
+  pagina.appendChild(botaoFocado);
+
+  const ev = disparar(documento, 'keydown', botaoFocado); // Enter/Espaço
+  assert.ok(ev.previsto && ev.parado, 'keydown bloqueado em fase de captura');
+  assert.equal(tecla, 0, 'handler de teclado do elemento focado NÃO rodou');
+  const clique = disparar(documento, 'click', botaoFocado); // ativação por teclado
+  assert.equal(acao, 0, 'ação do botão focado NÃO disparou');
+  assert.ok(clique.previsto);
+});
+
+test('submit de formulário por baixo do overlay não chega ao handler', () => {
+  const { documento, pagina } = executarOverlay({ tela: 'painel' });
+  let enviou = false;
+  const form = criarElemento('form');
+  form.addEventListener('submit', () => { enviou = true; });
+  pagina.appendChild(form);
+  const ev = disparar(documento, 'submit', form);
+  assert.ok(ev.previsto && ev.parado, 'submit bloqueado em captura');
+  assert.equal(enviou, false, 'handler de submit da página NÃO foi chamado');
+});
+
+test('eventos por teclado nos controles do próprio overlay seguem funcionando', () => {
+  const { documento } = executarOverlay({ tela: 'inicial' });
+  const overlay = documento.getElementById('cna-falha-global');
+  let botao = null;
+  const acha = el => { if (el.tag === 'button') botao = el; el.children.forEach(acha); };
+  acha(overlay);
+  const ev = disparar(documento, 'keydown', botao); // Enter no botão de recuperação
+  assert.equal(ev.previsto, false, 'teclado no botão de recuperação não é bloqueado');
+});
+
+test('inert por baixo é aplicado e RESTAURADO só após recuperação bem-sucedida', async () => {
+  const tauri = { core: { invoke: () => Promise.resolve() } };
+  const { documento, pagina } = executarOverlay({ tela: 'conclusao', tauri });
+  assert.equal(pagina.inert, true, 'página por baixo ficou inert');
+  const overlay = documento.getElementById('cna-falha-global');
+  let botao = null;
+  const acha = el => { if (el.tag === 'button') botao = el; el.children.forEach(acha); };
+  acha(overlay);
+  await botao.clicar();
+  assert.equal(pagina.inert, false, 'interação restaurada após reinício confirmado');
+  assert.equal((documento.listeners.keydown || []).length, 0, 'bloqueios removidos');
+  assert.equal((documento.listeners.submit || []).length, 0);
+  // Com a página desbloqueada, o evento chega ao handler.
+  let acao = 0;
+  const alvo = criarElemento('button');
+  alvo.addEventListener('click', () => { acao++; });
+  pagina.appendChild(alvo);
+  disparar(documento, 'click', alvo);
+  assert.equal(acao, 1, 'clique volta a funcionar após recuperação');
 });
 
 // ---- Item 3: nenhuma aplicação continua após perda de conexão ------------
