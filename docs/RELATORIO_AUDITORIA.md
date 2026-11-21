@@ -339,3 +339,54 @@ Data: 21/11/2026. Branch: feat/tauri-webview2-real-flow-fluent (PR #1, sem merge
 - Executar push e confirmar CI verde: matriz Node 22/24 (Ubuntu/Windows), job Windows com cargo + build NSIS + upload do instalador (tamanho a confirmar no artefato).
 - Teste físico da queda do sidecar: matar o processo node com o app aberto em cada tela e verificar o overlay global na UI real (WebView2) — o mecanismo de injeção (`webview.eval` em página remota) precisa de confirmação física.
 - Teste físico do ciclo completo (login manual no portal real) — como nas rodadas anteriores, depende de sessão real do professor e segue fora do escopo automatizado.
+
+---
+
+## 16. Rodada 5 — correção final dos bloqueadores de segurança
+
+**Data:** 2026-11-21
+**Branch:** `feat/tauri-webview2-real-flow-fluent` (sem merge; PR #1 segue aberto)
+**HEAD funcional antes desta seção:** `31d43a7` (o commit que registra esta seção é o HEAD final — ver `git log -1`)
+**Sem push nesta rodada:** quem orquestra faz push e acompanha o CI.
+**Escopo:** 2 P0 + 3 P1 do prompt do auditor (`docs/PROMPT_RODADA5.md`, commitado nesta seção). Nenhuma alteração de rubrica, painel, copiar/colar/validar ou da regra de finalização automática. Nada de portal real, conta real ou Finalizar real — só fixtures/mocks.
+
+### Commits criados (um por item)
+
+| Hash | Item | Conteúdo |
+|------|------|----------|
+| `dcab0ef` | 1 (P0) | Overlay global bloqueia clique, teclado (Enter/Espaço em elemento focado), `submit` e interações sem clique convencional, em captura; `inert` nos elementos por baixo; controles do próprio overlay continuam funcionando; bloqueio e `inert` removidos SOMENTE após recuperação bem-sucedida. Testes comportamentais com DOM falso. |
+| `6caa748` | 2 (P0) | `AbortController`/`AbortSignal` compartilhado: `saude.js` aborta no `disconnected`, o orquestrador passa o sinal ao executor; `applyAcceptedCorrections` verifica cancelamento antes de iniciar/navegar, antes de preencher, imediatamente antes de finalizar e antes de continuar; restantes vão para revisão, `appliedRefs` só com confirmação, cancelamento nunca vira `APPLICATION_COMPLETED`. Testes de integração com mocks. |
+| `30c0cd9` | 3 (P1) | Rust: motivo de fim por GERAÇÃO (`Arc<AtomicU8>` em `SidecarState`), marcado em `parar_sidecar` ANTES do shutdown/kill por timeout; `estado_no_eof(pronto, motivo)` devolve `None` para encerramento normal e reinicialização; queda inesperada/falha de inicialização continuam gerando overlay. EOF tardio da geração antiga não silencia falha da nova. |
+| `31d43a7` | 4 (P1) | `ciclovida.js`: identificador do timer do prazo guardado e `clearTimeout()` ao concluir; estados explícitos `aberta → encerrando → fechada → prazo-esgotado`; registro pós-fechamento tem política definida (não entra na fila, aviso no log). Testes de comportamento, inclusive processo filho que só sai se o timer foi limpo. |
+| (este) | 5 + docs | Testes de integração dos três pontos principais já incluídos nos commits acima; seção 16 e prompt da rodada 5. |
+
+### Arquivos modificados
+
+- `poc-ui/falha-global.js`, `tests/falha-global.test.js`
+- `executor.js`, `src-node/saude.js`, `src-node/orquestrador.js`, `tests/executor-cancel.test.js` (NOVO)
+- `src-tauri/src/lib.rs`
+- `src-node/ciclovida.js`, `tests/ciclovida.test.js`
+- `docs/PROMPT_RODADA5.md` (NOVO), `docs/RELATORIO_AUDITORIA.md` (esta seção)
+
+### Resultados de testes locais (executados nesta rodada)
+
+| Suite | Resultado |
+|-------|-----------|
+| `npm test` (Node) | **295 testes: 294 pass, 0 fail, 1 skipped** (skip pré-existente); eram 283 → **12 testes novos** |
+| `cargo fmt --check` (src-tauri) | **OK** (após `cargo fmt` aplicar uma quebra de linha; reexecutado sem diffs) |
+| `cargo check` (src-tauri) | **OK** (rodado depois de `scripts\poc-package-resources.ps1`, **102,02 MB** de recursos) |
+| `cargo test` (src-tauri) | **OK: 9 passed, 0 failed** (7 anteriores + 2 novos de EOF intencional/gerações) |
+
+### Provas por item
+
+- **P0 — bloqueio real pelo overlay (item 1):** `tests/falha-global.test.js` dispara eventos no DOM falso e verifica COMPORTAMENTO: `keydown` num botão focado por baixo tem `preventDefault`+`stopPropagation`, handlers de teclado e a ação do botão NÃO rodam; `submit` de formulário por baixo não chega ao handler; teclado no botão de recuperação do overlay NÃO é bloqueado; `inert` é aplicado à página e restaurado (`false`) só depois de `reiniciar_sidecar` resolver, com os listeners removidos e o clique voltando a funcionar.
+- **P0 — cancelamento do executor (item 2):** `tests/executor-cancel.test.js` usa retorno de lote fictício com duas PRONTAS e stubs do portal: (a) queda após a 1ª finalização confirmada → 1 navegação, 1 `Finalizar`, `stats.finalizadasNestaExecucao = 1`, `appliedRefs = [ref1]`, 2ª atividade em revisão "não iniciada", evento `FLUXO_ERRO`/`ERRO_CONEXAO_PERDIDA` e nenhum `APPLICATION_COMPLETED`; (b) queda depois de preencher e antes de finalizar → `Finalizar` NUNCA chamado, `appliedRefs` vazio; (c) integração `browser.emit('disconnected')` → sinal compartilhado abortado, `encerrar(1)`, nenhuma finalização nova; (d) sem cancelamento, as duas PRONTAS seguem sendo finalizadas — regra de negócio inalterada.
+- **P1 — falso overlay (item 3):** `estado_no_eof(true/false, FIM_ENCERRAMENTO)` e `(... FIM_REINICIACAO)` retornam `None` (nenhum overlay); `(true, FIM_EM_EXECUCAO)` = `FALHA_SIDECAR` e `(false, ...)` = `FALHA_INICIALIZACAO`; teste de geração prova que marcar a antiga como reinício não impede o overlay da nova se ela cair. `parar_sidecar` marca o motivo antes de escrever `shutdown` e antes do `kill` por timeout, cobrindo a distinção também no caminho de timeout.
+- **P1 — prazo e fila tardia (item 4):** processo filho com teto de 60s termina em <8s (só sai se `clearTimeout` tiver limpo o timer); transições `aberta → encerrando → fechada` observadas por getter; registro pós-fechamento não é executado e gera aviso explícito; `prazo-esgotado` é estado distinto quando a rotina nunca termina.
+- **P1 — integração (item 5):** coberta nos três pontos acima, com mocks e fixtures; nenhum dado real ou atividade real foi tocada.
+
+### Pendências de validação física
+
+- Push e CI: matriz Node 22/24 (Ubuntu/Windows) e job Windows com cargo + build NSIS + upload do instalador.
+- Queda real do sidecar (matar o processo com o app aberto) e reinício pelo botão do overlay na WebView2 real.
+- Instalação NSIS real e fluxo completo no portal — somente com autorização, sem atividades reais para finalização.
