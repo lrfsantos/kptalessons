@@ -3,6 +3,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -25,7 +26,15 @@ struct SidecarState {
     profile_dir: PathBuf,
     /// Origens locais (servidor de telas + painel) anunciadas pelo sidecar.
     origens: Arc<OrigensLocais>,
+    /// Motivo do fim da geração ATUAL do sidecar (por spawn, não global): um
+    /// EOF tardio da geração anterior não pode silenciar a queda da nova.
+    fim_sidecar: Mutex<Option<Arc<AtomicU8>>>,
 }
+
+// Motivo do fim registrado ANTES de encerrar o processo (shutdown/kill).
+const FIM_EM_EXECUCAO: u8 = 0;
+const FIM_ENCERRAMENTO: u8 = 1; // shutdown do aplicativo
+const FIM_REINICIACAO: u8 = 2; // parar o anterior antes de reiniciar
 
 /// Caminhos autorizados do servidor de telas (rotas fixas de src-node/telas.js).
 const TELAS_PATHS: [&str; 8] = [
@@ -226,14 +235,15 @@ fn spawn_sidecar(base: &Path, cdp_port: u16) -> Result<(Child, std::process::Chi
     Ok((child, stdin))
 }
 
-/// Estado emitido à UI quando o stdout do sidecar chega ao fim (EOF = processo
-/// morreu). Antes do handshake: falha de inicialização; depois: queda inesperada
-/// — a interface NUNCA fica aparentemente funcional sem comunicação.
-fn estado_no_eof(pronto: bool) -> &'static str {
-    if pronto {
-        "FALHA_SIDECAR"
-    } else {
-        "FALHA_INICIALIZACAO"
+/// Classifica o fim do stdout. Somente queda inesperada (antes/depois do
+/// handshake) gera overlay: encerramento do app e reinicialização são
+/// intencionais e NÃO são falha (rodada 5, item 3). `motivo` é o da geração
+/// cujo stdout chegou ao fim — nunca o da geração seguinte.
+fn estado_no_eof(pronto: bool, motivo: u8) -> Option<&'static str> {
+    match motivo {
+        FIM_ENCERRAMENTO | FIM_REINICIACAO => None,
+        _ if pronto => Some("FALHA_SIDECAR"),
+        _ => Some("FALHA_INICIALIZACAO"),
     }
 }
 
@@ -285,7 +295,12 @@ fn drenar_stderr(child: &mut Child) {
 /// eventos; demais linhas (log técnico) NÃO vão para a interface.
 /// EOF no stdout (processo morreu) => FALHA estruturada na UI, ANTES ou
 /// DEPOIS do handshake.
-fn watch_sidecar_stdout(app: tauri::AppHandle, child: &mut Child, origens: Arc<OrigensLocais>) {
+fn watch_sidecar_stdout(
+    app: tauri::AppHandle,
+    child: &mut Child,
+    origens: Arc<OrigensLocais>,
+    fim: Arc<AtomicU8>,
+) {
     drenar_stderr(child);
     let Some(stdout) = child.stdout.take() else {
         return;
@@ -325,6 +340,11 @@ fn watch_sidecar_stdout(app: tauri::AppHandle, child: &mut Child, origens: Arc<O
             }
             // Outras linhas: log técnico do node — não encaminhadas à UI (privacidade).
         }
+        // EOF intencional (shutdown ou reinício, inclusive após kill por
+        // timeout) NÃO é falha: nenhum overlay é injetado.
+        let Some(estado) = estado_no_eof(pronto, fim.load(Ordering::SeqCst)) else {
+            return;
+        };
         let msg = if pronto {
             serde_json::json!({
                 "mensagem": "O serviço interno foi encerrado inesperadamente. Tente reiniciar; se persistir, feche e abra o aplicativo novamente."
@@ -334,7 +354,7 @@ fn watch_sidecar_stdout(app: tauri::AppHandle, child: &mut Child, origens: Arc<O
                 "mensagem": "O aplicativo não conseguiu iniciar o serviço interno. Feche e tente novamente; se persistir, reinstale."
             }).to_string()
         };
-        mostrar_falha_global(&app, estado_no_eof(pronto), &msg);
+        mostrar_falha_global(&app, estado, &msg);
     });
 }
 
@@ -345,7 +365,14 @@ fn emit_estado(app: &tauri::AppHandle, estado: &str, detalhe: &str) {
 /// Encerra o sidecar anterior (gracioso via stdin "shutdown" -> espera com
 /// timeout -> kill). Usado no fim do app E antes de reinicializar, impedindo
 /// reinicialização duplicada com processos órfãos.
-fn parar_sidecar(state: &State<'_, SidecarState>) {
+fn parar_sidecar(state: &State<'_, SidecarState>, motivo: u8) {
+    // Marca ANTES do shutdown/kill: mesmo que o EOF do stdout chegue tarde
+    // (timeout + kill), a geração atual é reconhecida como intencional.
+    if let Ok(g) = state.fim_sidecar.lock() {
+        if let Some(fim) = g.as_ref() {
+            fim.store(motivo, Ordering::SeqCst);
+        }
+    }
     if let Some(mut stdin) = state.stdin.lock().ok().and_then(|mut g| g.take()) {
         let _ = stdin.write_all(b"shutdown\n");
         let _ = stdin.flush();
@@ -385,7 +412,7 @@ fn parar_sidecar(state: &State<'_, SidecarState>) {
 /// Encerramento do aplicativo: para o sidecar e remove o perfil temporário
 /// (melhor esforço, com tentativas — o WebView2 pode demorar a soltar a pasta).
 fn shutdown_sidecar(state: &State<'_, SidecarState>) {
-    parar_sidecar(state);
+    parar_sidecar(state, FIM_ENCERRAMENTO);
     // Os processos internos do WebView2 desligam de forma assíncrona; a pasta
     // pode permanecer travada por alguns instantes. Tenta algumas vezes antes
     // de desistir (a inicialização seguinte também remove residuos).
@@ -421,10 +448,16 @@ fn iniciar_sidecar(
 ) -> Result<(), String> {
     // Impede reinicialização duplicada: encerra corretamente qualquer
     // processo anterior antes de iniciar outro sidecar.
-    parar_sidecar(state);
+    parar_sidecar(state, FIM_REINICIACAO);
+    // Cada spawn tem seu PRÓPRIO sinal: o EOF tardio da geração anterior
+    // carrega o motivo de reinício; o da nova geração é sempre uma queda real.
+    let fim = Arc::new(AtomicU8::new(FIM_EM_EXECUCAO));
+    if let Ok(mut g) = state.fim_sidecar.lock() {
+        *g = Some(fim.clone());
+    }
     let cdp_port = wait_cdp_port(&state.profile_dir, Duration::from_secs(30))?;
     let (mut child, stdin) = spawn_sidecar(base, cdp_port)?;
-    watch_sidecar_stdout(app.clone(), &mut child, state.origens.clone());
+    watch_sidecar_stdout(app.clone(), &mut child, state.origens.clone(), fim);
     if let Ok(mut g) = state.child.lock() {
         *g = Some(child);
     }
@@ -561,9 +594,38 @@ mod tests {
     #[test]
     fn eof_do_stdout_informa_falha_antes_e_depois_do_handshake() {
         // Antes do handshake: falha de inicialização (comportamento existente).
-        assert_eq!(estado_no_eof(false), "FALHA_INICIALIZACAO");
+        assert_eq!(
+            estado_no_eof(false, FIM_EM_EXECUCAO),
+            Some("FALHA_INICIALIZACAO")
+        );
         // Depois do handshake: queda inesperada estruturada (novo).
-        assert_eq!(estado_no_eof(true), "FALHA_SIDECAR");
+        assert_eq!(estado_no_eof(true, FIM_EM_EXECUCAO), Some("FALHA_SIDECAR"));
+    }
+
+    #[test]
+    fn eof_intencional_nao_gera_overlay_de_falha() {
+        // Shutdown do aplicativo e reinicialização: nenhuma das duas é queda.
+        assert_eq!(estado_no_eof(true, FIM_ENCERRAMENTO), None);
+        assert_eq!(estado_no_eof(false, FIM_ENCERRAMENTO), None);
+        assert_eq!(estado_no_eof(true, FIM_REINICIACAO), None);
+        assert_eq!(estado_no_eof(false, FIM_REINICIACAO), None);
+        // Inclusive quando o anterior foi morto por timeout: o motivo já
+        // estava marcado antes do kill.
+        assert_eq!(estado_no_eof(true, FIM_REINICIACAO), None);
+    }
+
+    #[test]
+    fn motivo_de_fim_e_por_geracao_e_nao_vaza_para_o_novo_processo() {
+        let antigo = Arc::new(AtomicU8::new(FIM_EM_EXECUCAO));
+        let novo = Arc::new(AtomicU8::new(FIM_EM_EXECUCAO));
+        // reiniciar_sidecar marca a geração antiga ANTES de parar/kill.
+        antigo.store(FIM_REINICIACAO, Ordering::SeqCst);
+        assert_eq!(estado_no_eof(true, antigo.load(Ordering::SeqCst)), None);
+        // O EOF tardio da antiga NÃO pode impedir o overlay da nova se ela cair.
+        assert_eq!(
+            estado_no_eof(true, novo.load(Ordering::SeqCst)),
+            Some("FALHA_SIDECAR")
+        );
     }
 
     // ---- Item 2 (rodada 4): falha global centralizada em qualquer tela ---
@@ -626,6 +688,7 @@ pub fn run() {
             stdin: Mutex::new(None),
             profile_dir: profile.clone(),
             origens: local_ports.clone(),
+            fim_sidecar: Mutex::new(None),
         })
         .setup(move |app| {
             let base = if cfg!(debug_assertions) {
