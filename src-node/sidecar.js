@@ -55,6 +55,9 @@ const PAGES = {
   '/progresso': path.join(BASE, 'poc-ui', 'progresso.html'),
   '/conclusao': path.join(BASE, 'poc-ui', 'conclusao.html'),
   '/styles.css': path.join(BASE, 'poc-ui', 'styles.css'),
+  '/app.js': path.join(BASE, 'poc-ui', 'app.js'),
+  '/progresso.js': path.join(BASE, 'poc-ui', 'progresso.js'),
+  '/conclusao.js': path.join(BASE, 'poc-ui', 'conclusao.js'),
 };
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
 
@@ -79,6 +82,18 @@ server.listen(0, '127.0.0.1', async () => {
   log('servidor-local-pronto', { port: demoPort, evidence: EVIDENCE_DIR });
   panel = await createPanel({ collection: fixture.collection, lotesDir: LOTES_DIR, returnsDir: RETURNS_DIR });
   log('painel-criado', { url: panel.url });
+  // Handshake com o Rust: portas locais vão para a allowlist de navegação.
+  console.log('CNA_SIDECAR_READY ' + JSON.stringify({ demoPort, panelPort: panel.port != null ? panel.port : Number(new URL(panel.url).port) }));
+  // Encerramento gracioso: Rust escreve "shutdown" no stdin (5.6).
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', chunk => {
+    if (String(chunk).trim() !== 'shutdown') return;
+    (async () => {
+      try { server.close(); } catch { /* já fechado */ }
+      try { if (panel) await panel.close(); } catch { /* já fechado */ }
+      process.exit(0);
+    })();
+  });
   await rodarDemo(demoPort);
 });
 
@@ -114,6 +129,7 @@ async function rodarDemo(demoPort) {
   const demoBase = `http://127.0.0.1:${demoPort}`;
   const browser = await conectar(CDP_PORT);
   log('cdp-conectado', { endpointLoopback: true });
+  console.log('CNA_CDP_CONECTADO');
   const { ctx, page } = await primeiroProcessoWeb(browser);
   page.on('response', async r => {
     if (!r.url().includes('/api/submit')) return;
