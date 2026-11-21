@@ -206,7 +206,7 @@ async function rodarFluxo(demoPort) {
   gerenciador.aoEncerrar(async () => {
     try { await panel.close(); } catch { /* já fechado */ }
   });
-  const panelPort = Number(new URL(panel.url).port);
+  const painelPort = Number(new URL(panel.url).port);
   const painelPath = new URL(panel.url).pathname;
   console.log('CNA_PORTS ' + JSON.stringify({ telasPort: demoPort, painelPort, painelPath }));
   evento('PANEL_READY', { lotes: coleta.collection.batches.length, atividades: coleta.collection.batches.reduce((n, b) => n + b.total, 0) });
@@ -235,6 +235,14 @@ async function rodarFluxo(demoPort) {
     .map(f => path.join(CFG.RETURNS_DIR, f));
   const data = JSON.parse(fs.readFileSync(CFG.ANSWERS_FILE, 'utf8'));
   const { stats } = await applyAcceptedCorrections({ page, files, data, signal: controlador.signal, onProgress: (ev, d) => evento(ev, d) });
+  // Rodada 6, item 1: a conexão pode cair DURANTE a aplicação. O executor já
+  // emitiu APPLICATION_FAILED; anunciar conclusão aqui contradiria esse sinal.
+  // Preserva as contagens confirmadas nas evidências e encerra sem tela de
+  // sucesso (a falha global é apresentada pelo Rust no EOF do sidecar).
+  if (controlador.signal.aborted) {
+    log('fluxo-interrompido', { finalizadas: stats.finalizadasNestaExecucao, revisao: stats.revisaoManual });
+    return;
+  }
   panel.setPhase('done');
 
   // 7. Conclusão com resumo honesto (só contagens confirmadas) + pasta de
