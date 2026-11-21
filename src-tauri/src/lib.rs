@@ -237,6 +237,35 @@ fn estado_no_eof(pronto: bool) -> &'static str {
     }
 }
 
+/// Extrai a mensagem humana do detalhe JSON emitido com o estado.
+fn mensagem_do_detalhe(detalhe: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(detalhe)
+        .ok()
+        .and_then(|v| v.get("mensagem").and_then(|m| m.as_str()).map(String::from))
+        .unwrap_or_default()
+}
+
+/// Script do overlay global de falha. Fonte ÚNICA em poc-ui/falha-global.js
+/// (também testada em Node); o placeholder é substituído por uma string JSON
+/// (sempre válida em JS, já com aspas e escapes corretos).
+fn script_falha_global(mensagem: &str) -> String {
+    let json = serde_json::to_string(mensagem).unwrap_or_else(|_| "\"\"".into());
+    include_str!("../../poc-ui/falha-global.js").replace("__CNA_MENSAGEM__", &json)
+}
+
+/// Falha global (queda do sidecar / falha de inicialização): emite o estado
+/// E injeta o overlay em QUALQUER página atualmente aberta — solução
+/// centralizada na camada Tauri (rodada 4, item 2), sem listeners por página.
+/// O overlay bloqueia a interação com a página por baixo (nada parece
+/// funcional) e oferece recuperação segura (reiniciar_sidecar, que encerra o
+/// sidecar anterior antes de criar outro — sem reinicialização duplicada).
+fn mostrar_falha_global(app: &tauri::AppHandle, estado: &str, detalhe: &str) {
+    let _ = app.emit("app-estado", (estado, detalhe));
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.eval(&script_falha_global(&mensagem_do_detalhe(detalhe)));
+    }
+}
+
 /// Drena o stderr do sidecar continuamente: sem isso, pipes cheios travam o
 /// processo. Conteúdo técnico é descartado (nunca encaminhado à UI/privacidade).
 fn drenar_stderr(child: &mut Child) {
@@ -305,7 +334,7 @@ fn watch_sidecar_stdout(app: tauri::AppHandle, child: &mut Child, origens: Arc<O
                 "mensagem": "O aplicativo não conseguiu iniciar o serviço interno. Feche e tente novamente; se persistir, reinstale."
             }).to_string()
         };
-        let _ = app.emit("app-estado", (estado_no_eof(pronto), msg));
+        mostrar_falha_global(&app, estado_no_eof(pronto), &msg);
     });
 }
 
@@ -536,6 +565,34 @@ mod tests {
         // Depois do handshake: queda inesperada estruturada (novo).
         assert_eq!(estado_no_eof(true), "FALHA_SIDECAR");
     }
+
+    // ---- Item 2 (rodada 4): falha global centralizada em qualquer tela ---
+
+    #[test]
+    fn mensagem_do_detalhe_extrai_mensagem_do_json() {
+        assert_eq!(
+            mensagem_do_detalhe(r#"{"mensagem":"serviço caiu"}"#),
+            "serviço caiu"
+        );
+        // Detalhe sem mensagem (ou inválido): string vazia, nunca panic.
+        assert_eq!(mensagem_do_detalhe("{}"), "");
+        assert_eq!(mensagem_do_detalhe("não é json"), "");
+    }
+
+    #[test]
+    fn script_falha_global_tem_mensagem_escapada_e_sem_placeholder() {
+        // Mensagem com aspas/acentos: precisa sair como string JSON válida.
+        let s = script_falha_global("Serviço \"interrompido\" — reinicie.");
+        assert!(!s.contains("__CNA_MENSAGEM__"), "placeholder substituído");
+        assert!(s.contains(r#""Serviço \"interrompido\" — reinicie.""#));
+        assert!(s.contains("cna-falha-global"), "overlay global com id fixo");
+        assert!(
+            s.contains("reiniciar_sidecar"),
+            "recuperação segura via comando"
+        );
+        // Idempotência embutida: segundo overlay não duplica.
+        assert!(s.contains("getElementById('cna-falha-global')"));
+    }
 }
 
 pub fn run() {
@@ -597,7 +654,7 @@ pub fn run() {
             let win = match win {
                 Ok(w) => w,
                 Err(e) => {
-                    emit_estado(
+                    mostrar_falha_global(
                         app.handle(),
                         "FALHA_INICIALIZACAO",
                         &format!("{{\"mensagem\":\"Falha ao criar a janela: {e}\"}}"),
@@ -612,7 +669,7 @@ pub fn run() {
             let state = app.state::<SidecarState>();
             if let Err(e) = iniciar_sidecar(app.handle().clone(), &state, &base) {
                 let msg = serde_json::json!({ "mensagem": e }).to_string();
-                emit_estado(app.handle(), "FALHA_INICIALIZACAO", &msg);
+                mostrar_falha_global(app.handle(), "FALHA_INICIALIZACAO", &msg);
             }
             Ok(())
         })

@@ -30,6 +30,7 @@ const { collectActivities } = require(path.join(BASE, 'scraper.js'));
 const { applyAcceptedCorrections } = require(path.join(BASE, 'executor.js'));
 const { criarGerenciador, fecharServidor, limparExecucoesAbandonadas } = require(path.join(__dirname, 'ciclovida.js'));
 const { irPara } = require(path.join(__dirname, 'navegacao.js'));
+const { vigiarConexao } = require(path.join(__dirname, 'saude.js'));
 
 // Dados da execução em %TEMP%: em produção resources/ é somente leitura.
 // DIRETÓRIO SENSÍVEL: contém respostas dos alunos (answers.json), lotes,
@@ -98,6 +99,9 @@ async function conectar(cdpPort) {
   while (Date.now() < deadline) {
     try {
       const browser = await chromium.connectOverCDP(endpoint);
+      // Saúde: desconexão inesperada interrompe TUDO (rodada 4, item 3) —
+      // nenhuma aplicação continua sem comunicação; o Rust apresenta a falha.
+      vigiarConexao({ browser, gerenciador, evento });
       gerenciador.aoEncerrar(async () => {
         // Desconecta o Playwright SEM encerrar o próprio WebView2 (a janela
         // continua visível para o usuário até o app fechar).
@@ -218,6 +222,8 @@ async function rodarFluxo(demoPort) {
 
   // 6. Aplicação: preenche e FINALIZA as PRONTAS (regra absoluta do produto);
   //    revisões nunca são tocadas; appliedRefs só com confirmação positiva.
+  // Rodada 4, item 3: sem conexão viva com o portal, NENHUMA aplicação inicia.
+  if (!browser.isConnected()) throw new Error('conexão perdida antes de aplicar');
   panel.setPhase('applying');
   evento('APPLICATION_STARTED', {});
   await barraEstado(page, 'Aplicando as correções no portal…');
