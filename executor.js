@@ -56,10 +56,15 @@ function indexOriginals(data) {
   return map;
 }
 
-function applyAcceptedCorrections({ page, files, data, onProgress = () => {} } = {}) {
+function applyAcceptedCorrections({ page, files, data, signal = null, onProgress = () => {} } = {}) {
   return (async () => {
     const collection = data.collection;
     const applied = new Set(data.appliedRefs || []);
+    // Rodada 5, item 2: sinal compartilhado com o monitor de saúde. Uma vez
+    // abortado, NENHUMA nova operação no portal começa; só confirmações já
+    // obtidas entram em appliedRefs (regra inalterada).
+    const cancelado = () => !!(signal && signal.aborted);
+    const motivo = () => (signal && signal.reason && signal.reason.message) || 'conexão perdida';
     // T12: valida cada devolvido contra a coleta atual antes de qualquer navegação.
     const inspected = mdrv.inspectReturnedBatches(files.map(f => ({ path: f })), collection);
     for (const f of inspected.files) {
@@ -139,6 +144,13 @@ function applyAcceptedCorrections({ page, files, data, onProgress = () => {} } =
     const filled = [];
     onProgress('APPLICATION_STARTED', { prontas: prontas.length });
     for (const r of prontas) {
+      // Antes de iniciar/navegar para cada atividade (e antes de continuar
+      // para a próxima): restantes ficam em revisão, nunca em appliedRefs.
+      if (cancelado()) {
+        r.status = 'REVISAO';
+        r.reasons = [...(r.reasons || []), 'aplicação cancelada (' + motivo() + ') — não iniciada'];
+        continue;
+      }
       const url = portal.activityUrl(r.classId, r.studentId, r.unitId, r.lessonId, r.activityId);
       process.stdout.write(`   ${r.ref} ... `);
       try {
@@ -178,11 +190,25 @@ function applyAcceptedCorrections({ page, files, data, onProgress = () => {} } =
           continue;
         }
 
+        // A conexão pode cair DURANTE a navegação/leitura: não preencher.
+        if (cancelado()) {
+          r.status = 'REVISAO';
+          r.reasons = [...(r.reasons || []), 'aplicação cancelada (' + motivo() + ') antes de preencher — não iniciada'];
+          continue;
+        }
         const res = await portal.fillCorrection(page, r.classification, r.feedback);
         if (res.ok) {
-          const fin = await portal.finalize(page);
-          if (fin.ok) { r.finalized = true; filled.push(r); console.log(`${r.classification} — FINALIZADA`); }
-          else { r.status = 'REVISAO'; r.reasons = [...(r.reasons || []), fin.error]; console.log(`FALHA NA FINALIZAÇÃO: ${fin.error} — não registrada como concluída`); }
+          // Imediatamente antes da finalização (ação irreversível): cancelado
+          // => NÃO clicar, NÃO registrar como concluída.
+          if (cancelado()) {
+            r.status = 'REVISAO';
+            r.reasons = [...(r.reasons || []), 'aplicação cancelada (' + motivo() + ') após preencher — não finalizada'];
+            console.log('CANCELADA: conexão perdida antes da finalização — não registrada como concluída');
+          } else {
+            const fin = await portal.finalize(page);
+            if (fin.ok) { r.finalized = true; filled.push(r); console.log(`${r.classification} — FINALIZADA`); }
+            else { r.status = 'REVISAO'; r.reasons = [...(r.reasons || []), fin.error]; console.log(`FALHA NA FINALIZAÇÃO: ${fin.error} — não registrada como concluída`); }
+          }
         }
         else { r.status = 'REVISAO'; r.reasons = [...(r.reasons || []), res.error]; console.log(`FALHOU: ${res.error}`); }
       } catch (err) {
@@ -241,7 +267,9 @@ function applyAcceptedCorrections({ page, files, data, onProgress = () => {} } =
 
     for (const r of filled) if (r.finalized && r.status === 'PRONTA') onProgress('ACTIVITY_FINALIZED', { status: r.classification });
     if (rev.length) onProgress('REVIEW_REQUIRED', { revisao: rev.length });
-    onProgress(aplicadas.length ? 'APPLICATION_COMPLETED' : 'APPLICATION_FAILED', {
+    if (cancelado()) onProgress('FLUXO_ERRO', { codigo: 'ERRO_CONEXAO_PERDIDA' });
+    // Cancelamento NUNCA vira sucesso, mesmo com confirmações parciais.
+    onProgress(!cancelado() && aplicadas.length ? 'APPLICATION_COMPLETED' : 'APPLICATION_FAILED', {
       finalizadas: stats.finalizadasNestaExecucao,
       jaCorrigidas: stats.jaCorrigidasNoPortal,
       revisao: stats.revisaoManual,

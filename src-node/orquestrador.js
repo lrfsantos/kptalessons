@@ -49,6 +49,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // --- ciclo de vida: recursos ativos e encerramento idempotente ----------
 const gerenciador = criarGerenciador({ runDir: RUN_DIR, exportarResultados: exportarResultadosProfessor });
+// Rodada 5, item 2: sinal ÚNICO compartilhado entre o monitor de saúde e o
+// executor: a perda de conexão aborta o loop de aplicação imediatamente.
+const controlador = new AbortController();
 
 // Política de retenção: o professor mantém a LISTA DE REVISÃO MANUAL
 // (necessária para corrigir à mão no portal). Dados brutos (answers.json,
@@ -101,7 +104,7 @@ async function conectar(cdpPort) {
       const browser = await chromium.connectOverCDP(endpoint);
       // Saúde: desconexão inesperada interrompe TUDO (rodada 4, item 3) —
       // nenhuma aplicação continua sem comunicação; o Rust apresenta a falha.
-      vigiarConexao({ browser, gerenciador, evento });
+      vigiarConexao({ browser, gerenciador, evento, controlador });
       gerenciador.aoEncerrar(async () => {
         // Desconecta o Playwright SEM encerrar o próprio WebView2 (a janela
         // continua visível para o usuário até o app fechar).
@@ -231,7 +234,7 @@ async function rodarFluxo(demoPort) {
     .filter(f => /^lote-\d{2,}\.md$/i.test(f))
     .map(f => path.join(CFG.RETURNS_DIR, f));
   const data = JSON.parse(fs.readFileSync(CFG.ANSWERS_FILE, 'utf8'));
-  const { stats } = await applyAcceptedCorrections({ page, files, data, onProgress: (ev, d) => evento(ev, d) });
+  const { stats } = await applyAcceptedCorrections({ page, files, data, signal: controlador.signal, onProgress: (ev, d) => evento(ev, d) });
   panel.setPhase('done');
 
   // 7. Conclusão com resumo honesto (só contagens confirmadas) + pasta de
