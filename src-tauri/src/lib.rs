@@ -317,7 +317,41 @@ fn iniciar_sidecar(
     Ok(())
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ports(items: &[u16]) -> Arc<Mutex<HashSet<u16>>> {
+        Arc::new(Mutex::new(items.iter().copied().collect()))
+    }
+
+    #[test]
+    fn origem_tauri_permitida() {
+        let p = ports(&[]);
+        assert!(allowed_url(&Url::parse("tauri://localhost/index.html").unwrap(), &p));
+        assert!(allowed_url(&Url::parse("http://tauri.localhost/index.html").unwrap(), &p));
+    }
+
+    #[test]
+    fn servidor_local_somente_porta_anunciada() {
+        let p = ports(&[51234]);
+        assert!(allowed_url(&Url::parse("http://127.0.0.1:51234/painel/abc/").unwrap(), &p));
+        assert!(!allowed_url(&Url::parse("http://127.0.0.1:9999/").unwrap(), &p));
+        assert!(!allowed_url(&Url::parse("http://localhost:51234/").unwrap(), &p));
+        assert!(!allowed_url(&Url::parse("http://192.168.0.10:51234/").unwrap(), &p));
+    }
+
+    #[test]
+    fn portal_cna_somente_https_porta_padrao() {
+        let p = ports(&[]);
+        assert!(allowed_url(&Url::parse("https://app.cna.com.br/login").unwrap(), &p));
+        assert!(!allowed_url(&Url::parse("http://app.cna.com.br/login").unwrap(), &p));
+        assert!(!allowed_url(&Url::parse("https://app.cna.com.br:8443/login").unwrap(), &p));
+        assert!(!allowed_url(&Url::parse("https://malicioso.cna.com.br/login").unwrap(), &p));
+        assert!(!allowed_url(&Url::parse("https://evil.example/").unwrap(), &p));
+    }
+}
+
 pub fn run() {
     let profile = profile_dir();
     cleanup_stale_profiles(&profile);
