@@ -28,8 +28,14 @@ const CFG = require(path.join(BASE, 'lib', 'config.js'));
 const { performLogin } = require(path.join(BASE, 'login.js'));
 const { collectActivities } = require(path.join(BASE, 'scraper.js'));
 const { applyAcceptedCorrections } = require(path.join(BASE, 'executor.js'));
+const { criarGerenciador, fecharServidor, limparExecucoesAbandonadas } = require(path.join(__dirname, 'ciclovida.js'));
 
 // Dados da execução em %TEMP%: em produção resources/ é somente leitura.
+// DIRETÓRIO SENSÍVEL: contém respostas dos alunos (answers.json), lotes,
+// retornos da IA e evidências. É removido no encerramento (normal ou após
+// erro) — ver gerenciador abaixo. Só sobrevive o que o professor precisa
+// consultar (revisão manual), exportado para a pasta de resultados.
+limparExecucoesAbandonadas('cna-corretor-run-');
 const RUN_DIR = path.join(os.tmpdir(), `cna-corretor-run-${process.pid}-${Date.now()}`);
 fs.mkdirSync(RUN_DIR, { recursive: true });
 for (const [chave, nome] of Object.entries({
@@ -38,6 +44,28 @@ for (const [chave, nome] of Object.entries({
 })) CFG[chave] = path.join(RUN_DIR, nome);
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// --- ciclo de vida: recursos ativos e encerramento idempotente ----------
+const gerenciador = criarGerenciador({ runDir: RUN_DIR, exportarResultados: exportarResultadosProfessor });
+
+// Política de retenção: o professor mantém a LISTA DE REVISÃO MANUAL
+// (necessária para corrigir à mão no portal). Dados brutos (answers.json,
+// lotes, retornos, relatórios com respostas) ficam só no RUN_DIR e são
+// descartados. Retorna a pasta onde o arquivo foi exportado (mostrada na
+// tela de conclusão) ou null se nada precisou ser exportado.
+let pastaResultados = null;
+function exportarResultadosProfessor() {
+  if (pastaResultados) return pastaResultados;
+  try {
+    if (!fs.existsSync(CFG.REVISAO_FILE) || !fs.statSync(CFG.REVISAO_FILE).size) return null;
+    const pasta = path.join(os.homedir(), 'Documents', 'Corretor CNA');
+    fs.mkdirSync(pasta, { recursive: true });
+    const carimbo = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    fs.copyFileSync(CFG.REVISAO_FILE, path.join(pasta, `revisao-manual-${carimbo}.md`));
+    pastaResultados = pasta;
+  } catch { /* melhor esforço: não impedir a limpeza por causa disto */ }
+  return pastaResultados;
+}
 
 // Evidências locais (JSONL) — sem dados pessoais: só contagens e estágios.
 const EVIDENCE_DIR = path.join(RUN_DIR, 'evidencias');
@@ -84,7 +112,15 @@ async function conectar(cdpPort) {
   const deadline = Date.now() + 90000;
   let lastErr = null;
   while (Date.now() < deadline) {
-    try { return await chromium.connectOverCDP(endpoint); }
+    try {
+      const browser = await chromium.connectOverCDP(endpoint);
+      gerenciador.aoEncerrar(async () => {
+        // Desconecta o Playwright SEM encerrar o próprio WebView2 (a janela
+        // continua visível para o usuário até o app fechar).
+        try { await browser.close(); } catch { /* já desconectado */ }
+      });
+      return browser;
+    }
     catch (e) { lastErr = e.message; await sleep(700); }
   }
   throw new Error('não foi possível conectar ao WebView2 por CDP: ' + lastErr);
@@ -179,6 +215,9 @@ async function rodarFluxo(demoPort) {
     lotesDir: CFG.LOTES_DIR,
     returnsDir: CFG.RETURNS_DIR,
   });
+  gerenciador.aoEncerrar(async () => {
+    try { await panel.close(); } catch { /* já fechado */ }
+  });
   const panelPort = Number(new URL(panel.url).port);
   console.log('CNA_PORTS ' + JSON.stringify({ ports: [demoPort, panelPort] }));
   evento('PANEL_READY', { lotes: coleta.collection.batches.length, atividades: coleta.collection.batches.reduce((n, b) => n + b.total, 0) });
@@ -202,14 +241,17 @@ async function rodarFluxo(demoPort) {
   const { stats } = await applyAcceptedCorrections({ page, files, data, onProgress: (ev, d) => evento(ev, d) });
   panel.setPhase('done');
 
-  // 7. Conclusão com resumo honesto (só contagens confirmadas).
+  // 7. Conclusão com resumo honesto (só contagens confirmadas) + pasta de
+  //    resultados quando houve revisão manual para o professor consultar.
   await barraEstado(page, '');
+  const pasta = exportarResultadosProfessor();
   const params = new URLSearchParams({
     finalizadas: String(stats.finalizadasNestaExecucao),
     jaCorrigidas: String(stats.jaCorrigidasNoPortal),
     revisao: String(stats.revisaoManual),
     falhas: String(stats.falhasFinalizacao),
   });
+  if (pasta) params.set('pasta', pasta);
   await irPara(page, demoBase + '/conclusao?' + params.toString());
   log('fluxo-concluido', { finalizadas: stats.finalizadasNestaExecucao, revisao: stats.revisaoManual });
   evento('APPLICATION_COMPLETED', {
@@ -223,14 +265,14 @@ server.listen(0, '127.0.0.1', async () => {
   const demoPort = server.address().port;
   log('servidor-local-pronto', { port: demoPort });
   console.log('CNA_SIDECAR_READY ' + JSON.stringify({ demoPort }));
-  // Encerramento gracioso: Rust escreve "shutdown" no stdin.
+  // Encerramento gracioso: Rust escreve "shutdown" no stdin. A limpeza é
+  // idempotente, remove os dados temporários sensíveis e SÓ então encerra
+  // o processo (nunca process.exit imediato após server.close()).
+  gerenciador.aoEncerrar(() => fecharServidor(server));
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', chunk => {
     if (String(chunk).trim() !== 'shutdown') return;
-    (async () => {
-      try { server.close(); } catch { /* já fechado */ }
-      process.exit(0);
-    })();
+    gerenciador.encerrar(0);
   });
   try {
     await rodarFluxo(demoPort);
