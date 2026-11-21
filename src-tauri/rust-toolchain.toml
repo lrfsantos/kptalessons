@@ -1,3 +1,5 @@
 [toolchain]
 # Pinada para manter cargo fmt determinístico entre local e CI.
+# components declarado aqui: perfis "minimal" (CI) não trazem rustfmt.
 channel = "1.100.0"
+components = ["rustfmt"]
