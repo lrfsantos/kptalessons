@@ -160,7 +160,7 @@ fn node_executable(base: &Path) -> Result<PathBuf, String> {
 }
 
 fn spawn_sidecar(base: &Path, cdp_port: u16) -> Result<(Child, std::process::ChildStdin), String> {
-    let script = base.join("src-node").join("sidecar.js");
+    let script = base.join("src-node").join("orquestrador.js");
     if !script.exists() {
         return Err(format!("sidecar.js não encontrado em {}", script.display()));
     }
@@ -201,6 +201,14 @@ fn watch_sidecar_stdout(app: tauri::AppHandle, child: &mut Child, ports: Arc<Mut
                 }
             } else if line.starts_with("CNA_CDP_CONECTADO") {
                 let _ = app.emit("app-estado", ("WEBVIEW2_CONECTADO", "{}"));
+            } else if let Some(rest) = line.strip_prefix("CNA_PORTS ") {
+                // Portas anunciadas depois do handshake (painel criado após a coleta).
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(rest) {
+                    let mut set = ports.lock().unwrap();
+                    if let Some(arr) = v["ports"].as_array() {
+                        for p in arr { if let Some(p) = p.as_u64() { set.insert(p as u16); } }
+                    }
+                }
             } else if let Some(rest) = line.strip_prefix("CNA_EVENT ") {
                 // Evento estruturado do fluxo (sem dados pessoais).
                 let _ = app.emit("sidecar-evento", rest);
