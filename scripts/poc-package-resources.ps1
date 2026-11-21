@@ -22,6 +22,7 @@ Copy-Item (Join-Path $repo 'lib') (Join-Path $dest 'lib') -Recurse
 New-Item -ItemType Directory -Force -Path (Join-Path $dest 'ui') | Out-Null
 Copy-Item (Join-Path $repo 'ui\painel.html') (Join-Path $dest 'ui\painel.html')
 Copy-Item (Join-Path $repo 'ui\painel.css') (Join-Path $dest 'ui\painel.css')
+Copy-Item (Join-Path $repo 'ui\painel.js') (Join-Path $dest 'ui\painel.js')
 Copy-Item (Join-Path $repo 'poc-ui') (Join-Path $dest 'poc-ui') -Recurse
 Copy-Item (Join-Path $repo 'node_modules\playwright-core') (Join-Path $dest 'node_modules\playwright-core') -Recurse
 

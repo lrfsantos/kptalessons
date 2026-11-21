@@ -235,7 +235,7 @@ async function rodarDemo(demoPort) {
   await shot(page, '06-retorno-valido');
 
   // 7. Conclusao explicita (demonstracao, nada aplicado no portal).
-  await page.goto(demoBase + '/conclusao', { waitUntil: 'domcontentloaded' });
+  await page.goto(demoBase + '/conclusao?modo=demonstracao', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(500);
   log('conclusao', { url: page.url() });
   await shot(page, '07-conclusao');
