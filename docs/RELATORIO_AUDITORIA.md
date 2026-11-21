@@ -1,7 +1,7 @@
 # Relatório para Auditoria — Migração Tauri + WebView2 (janela única, fluxo real, Fluent)
 
 **Data:** 2026-11-21
-**Branch:** `feat/tauri-webview2-real-flow-fluent` (26+ commits a partir de `master` = `3f2145b`)
+**Branch:** `feat/tauri-webview2-real-flow-fluent` (52+ commits a partir de `master` = `3f2145b`; contagem atualizada na seção 15)
 **PR:** https://github.com/lrfsantos/kptalessons/pull/1 — aberto, **sem merge** (aguarda auditoria)
 **Status do CI na escrita deste relatório:** matriz Node 22/24 × Ubuntu/Windows **verde**; job Windows de build NSIS reexecutando após correção de toolchain (detalhe na seção 8).
 
@@ -278,3 +278,64 @@ Data: 21/11/2026. Branch: feat/tauri-webview2-real-flow-fluent (PR #1, sem merge
 - Executar push e confirmar CI verde: matriz Node 22/24 (Ubuntu/Windows) com `npm test` + `npm audit --audit-level=high`, job Windows com `cargo fmt --check` + `cargo check` + `cargo test` + build NSIS + upload do instalador.
 - Teste fisico da queda do sidecar (matar o processo node com o app aberto e verificar o cartao de erro/retry na UI real).
 - Teste fisico do ciclo completo (login manual no portal real com fixture de fluxo) - como nas rodadas anteriores, depende de sessao real do professor e segue fora do escopo automatizado.
+
+## 15. Rodada 4 — encerramento definitivo, recuperação de falhas, privacidade e integração (resposta ao prompt de 9 itens do auditor)
+
+**Data:** 2026-11-21
+**Branch:** `feat/tauri-webview2-real-flow-fluent` (continua, sem merge)
+**HEAD final:** ver "Commits" abaixo
+**Sem push nesta rodada:** quem orquestra faz push e acompanha o CI (PR #1 segue aberto).
+
+### Commits criados (um por item)
+
+| Hash | Item | Conteudo |
+|------|------|----------|
+| `8f6a083` | - | Prompt da rodada 4 arquivado em docs/PROMPT_RODADA4.md |
+| `b56308b` | 1 | Prazo GLOBAL único do encerramento: criado no INÍCIO de `encerrar()` (não depois da 1ª drenagem — recursos iniciais eternos não prendem mais); rotinas tardias vão para uma fila ainda aberta e CONTROLADA (`aoEncerrar` acorda o drenador; não depende de `Promise.resolve()` nem de um único tick); exportação AGUARDADA com `await` e dentro do mesmo prazo; RUN_DIR removida depois da exportação ou do prazo; encerramento continua com rotina/exportação falha; mesma Promise em chamadas simultâneas |
+| `b778acc` | 4 | Erros: códigos FECHADOS (`ERRO_TEMPO_ESGOTADO`, `ERRO_REDE`, `ERRO_CONEXAO_PERDIDA`, `ERRO_INESPERADO`) + mensagens fixas definidas pela interface (`MENSAGENS_ERRO`); `sanitizarExcecao` NUNCA encaminha o texto bruto da exceção (nem redigido) — nomes, respostas, referências e texto do portal não podem vazar por mensagens; `navegacao.js` envia `codigo` fechado; campo `codigo` na allowlist |
+| `cca8b90` | 2-3 | Queda do sidecar em QUALQUER tela: solução CENTRALIZADA na camada Tauri — o Rust injeta o overlay global (`poc-ui/falha-global.js`, fonte única via `include_str!`) na janela via `webview.eval`, independente da página atual (início/portal/coleta/painel/aplicação/conclusão); overlay bloqueia a interação com a página por baixo, informa a falha e oferece recuperação segura (`reiniciar_sidecar`, que encerra o sidecar anterior antes de criar outro); listener por página REMOVIDO de `poc-ui/app.js`; guarda de conexão (item 3): `src-node/saude.js` — desconexão inesperada do CDP emite `FLUXO_ERRO`/`ERRO_CONEXAO_PERDIDA` e encerra o sidecar com segurança (Rust detecta o EOF e apresenta a falha global); `browser.isConnected()` verificado ANTES de iniciar a aplicação; `appliedRefs` permanece intocado sem confirmação positiva |
+| `fb60363` | 3 | Erro do guarda de conexão ("conexão perdida antes de aplicar") mapeado para o código fechado `ERRO_CONEXAO_PERDIDA` |
+| `eb097d1` | 5 | Higiene: descoberta AUTOMÁTICA (varredura recursiva em tests/) dos arquivos de teste que referenciam o TEMP — novos testes não entram sem cobertura de limpeza; guarda contra regressão da descoberta; TEMP isolado mantido; nenhuma limpeza genérica (só prefixos comprovadamente da suíte) |
+| `c89b47b` | 6 | Camada de integração ponta a ponta (`tests/integracao.test.js`): encerramento com servidor de telas REAL + exportação demorada + limpeza no mesmo prazo; navegação contra o servidor de telas real (sucesso e falha estruturada); queda com as telas do servidor real (overlay independente da página, sem listener por página); erros do painel com fixture real (rejeição não grava, não conta, painel fecha limpo); limpeza de execuções (ativa preservada/abandonada removida); queda durante a aplicação (encerramento imediato, appliedRefs intocado) |
+| (este) | 7+9 | Documentação atualizada (números corrigidos; seção 15); workflow CI mantido como está |
+
+### Arquivos modificados
+
+- `src-node/ciclovida.js` (item 1), `src-node/eventos.js` (itens 3-4), `src-node/navegacao.js` (item 4), `src-node/orquestrador.js` (itens 2-3), `src-node/saude.js` (NOVO, item 3)
+- `src-tauri/src/lib.rs` (item 2: `mostrar_falha_global`, `script_falha_global`, `mensagem_do_detalhe`), `poc-ui/falha-global.js` (NOVO, item 2), `poc-ui/app.js` (item 2: listener por página removido)
+- Testes: `tests/ciclovida.test.js` (+10), `tests/eventos.test.js` (atualizado, +3 líquidos), `tests/navegacao.test.js` (atualizado), `tests/falha-global.test.js` (NOVO, 13), `tests/higiene-temp.test.js` (item 5), `tests/integracao.test.js` (NOVO, 6)
+- Docs: `docs/PROMPT_RODADA4.md` (NOVO), `docs/RELATORIO_AUDITORIA.md` (item 7)
+
+### Resultados de testes locais (executados nesta rodada)
+
+| Suite | Resultado |
+|-------|-----------|
+| `npm test` (Node) | **283 testes: 282 pass, 0 fail, 1 skipped** (skip pré-existente: teste de arquitetura que exige CDP real); antes da rodada eram 253 — **30 testes novos** |
+| `cargo fmt --check` (src-tauri) | **OK** (sem diffs) |
+| `cargo check` (src-tauri) | **OK** (Finished dev profile sem erros; rodado após `scripts/poc-package-resources.ps1`) |
+| `cargo test` (src-tauri) | **OK: 7 passed, 0 failed** (4 de allowlist + 1 de EOF + 2 novos de falha global) |
+
+### Classificação dos testes (unitário / integrado / CI / físico)
+
+- **Unitário:** lógica isolada — ciclovida (prazo global), eventos (códigos fechados), navegação, saude (guarda), overlay (DOM falso), allowlist Rust, `estado_no_eof`/`script_falha_global`.
+- **Integrado:** módulos reais ligados entre si com fixtures/mocks — `tests/integracao.test.js` (telas reais servidas por HTTP local, servidor real drenado no encerramento, painel real com fixture, limpeza de execuções).
+- **CI:** workflow `tests.yml` (matriz Node 22/24 Ubuntu/Windows: `npm test` + `npm audit --audit-level=high`; job Windows: `npm test`, empacotamento de resources, `cargo fmt --check`, `cargo check`, `cargo test`, build NSIS obrigatório, upload obrigatório) — executa APÓS o push.
+- **Físico:** app Tauri real com WebView2 e portal real — NÃO executado nesta rodada (pendências abaixo).
+
+### Provas (o que foi e não foi provado)
+
+- **Timeout global (item 1):** PROVADO por 10 testes novos em `tests/ciclovida.test.js`: recurso inicial ETERNO não prende (prazo de 300ms, encerramento conclui, RUN_DIR removida); recurso que termina antes do prazo é aguardado por completo; rotina registrada DENTRO de outra rotina é drenada; rotina registrada no limite da janela de tardios é drenada (janela de 400ms, registro aos 250ms); exportação assíncrona aguardada ANTES da remoção; falha de exportação não impede limpeza nem saída; múltiplas chamadas simultâneas com recurso eterno recebem a mesma Promise; limpeza mesmo com rotina falha + exportação falha + recurso eterno. O teto é criado no INÍCIO de `encerrar()` (o teste "prazo global é criado no INÍCIO" reproduz exatamente o cenário da auditoria: recurso registrado ANTES de `encerrar()` que nunca resolve).
+- **Encerramento assíncrono (item 1):** PROVADO: exportação `async` com atraso de 80ms é aguardada e o conteúdo exportado existe quando a RUN_DIR já foi removida; `Promise.race` contra o prazo global delimita rotinas e a exportação.
+- **Queda do sidecar em todas as telas (item 2):** PROVADO: (a) Rust emite `FALHA_SIDECAR` no EOF e INJETA o overlay global na janela (`mostrar_falha_global`) — centralizado, independente da página; (b) `tests/falha-global.test.js` executa a MESMA fonte (`poc-ui/falha-global.js`, embutida no Rust via `include_str!`) contra um DOM falso nas 6 telas (inicial, portal, coleta, painel, aplicação, conclusão): overlay apresentado, mensagem do Rust presente, página bloqueada, idempotente (sem overlay duplicado); (c) `tests/integracao.test.js` prova que as telas reais do servidor carregam e que NENHUMA página tem listener próprio de falha (centralização); (d) recuperação segura: com IPC invoca `reiniciar_sidecar` (que encerra o sidecar anterior antes de criar outro — sem duplicação) e remove o overlay; sem IPC (portal remoto) orienta fechar e reabrir. A deteccão física da queda com o app real NÃO foi exercitada fisicamente.
+- **Nenhuma aplicação após falha (item 3):** PROVADO: desconexão inesperada do CDP emite `FLUXO_ERRO`/`ERRO_CONEXAO_PERDIDA` (código FECHADO) e aciona o encerramento imediato do sidecar (Rust detecta o EOF → overlay global; processo morto não aplica nada); desconexão durante o próprio encerramento não reemite nem re-encerra; `browser.isConnected()` é verificado ANTES de iniciar a aplicação (invariante estrutural: guarda vem antes de `applyAcceptedCorrections`); `appliedRefs` permanece só com confirmação positiva (executor.js intocado, regra preservada).
+- **Privacidade (item 4):** PROVADO por `tests/eventos.test.js` (9 testes) e `tests/navegacao.test.js`: exceções contendo nomes fictícios ("Ana Silva"), e-mails, tokens, URLs, CPFs e respostas do aluno viram apenas `tipo` + `codigo` fechado + mensagem FIXA do dicionário da interface — o texto bruto da exceção NUNCA é encaminhado (nem redigido), testado por asserção de ausência em cada resultado; códigos fora do dicionário são impossíveis (`CODIGOS_ERRO` fechado); campos fora da allowlist continuam descartados (esquema fechado inalterado). Nota: com mensagens fechadas, o detalhe técnico da exceção não vai mais nem para as evidências locais — troca aceita conforme o item 4 do auditor.
+- **Higiene (item 5):** PROVADO: descoberta automática por varredura recursiva (inclui `tests/poc/`), com guarda que falha se a descoberta regredir (mínimo de arquivos + arquivos conhecidos); TEMP isolado do processo filho mantido; a verificação completa rodou verde no `npm test`.
+- **Integração (item 6):** PROVADO por `tests/integracao.test.js` (6 testes) com módulos REAIS: servidor de telas real drenado pelo encerramento (responde antes, rejeita depois), exportação demorada concluída antes da limpeza, navegação real com falha estruturada, painel real com fixture (rejeição não grava nem conta), limpeza rename-exclusivo, queda durante a aplicação. Nenhuma conta real, nenhum dado real, nenhum clique em Finalizar.
+- **CI (item 7):** workflow MANTIDO sem alterações (já atende: Node 22/24, Windows/Linux, `npm test`, `npm audit --audit-level=high`, `cargo fmt --check`, `cargo check`, `cargo test`, NSIS e upload obrigatórios). Números antigos corrigidos neste relatório (26+ → 52+ commits; 253 → 283 testes). A execução do CI em si só acontece após o push (feito por quem orquestra).
+- **Build NSIS e tamanho:** NÃO executado localmente nesta rodada (build pesado; recursos empacotados localmente para o cargo: **102,01 MB** total, node.exe **88,53 MB**, playwright-core **13,32 MB**). O instalador é produzido pelo job Windows do CI após o push — pendente de confirmação no CI.
+
+### Pendências físicas
+
+- Executar push e confirmar CI verde: matriz Node 22/24 (Ubuntu/Windows), job Windows com cargo + build NSIS + upload do instalador (tamanho a confirmar no artefato).
+- Teste físico da queda do sidecar: matar o processo node com o app aberto em cada tela e verificar o overlay global na UI real (WebView2) — o mecanismo de injeção (`webview.eval` em página remota) precisa de confirmação física.
+- Teste físico do ciclo completo (login manual no portal real) — como nas rodadas anteriores, depende de sessão real do professor e segue fora do escopo automatizado.
