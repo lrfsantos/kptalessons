@@ -23,46 +23,69 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
  * @param {function} [opts.exportarResultados]  Copia para fora (pasta de
  *        resultados do professor) o que precisa sobreviver à limpeza.
  * @param {function} [opts.sair]    Injetável para testes (padrão: process.exit).
- * @param {number} [opts.tetoMs]    Teto para recursos registrados durante a limpeza.
+ * @param {number} [opts.tetoMs]    Prazo GLOBAL ÚNICO do encerramento (do 1º
+ *        recurso ao exit; criado no início, nunca depois da 1ª drenagem).
+ * @param {number} [opts.janelaTardiasMs] Janela controlada para registros
+ *        tardios (aoEncerrar durante o encerramento) após a drenagem inicial.
  */
-function criarGerenciador({ runDir, exportarResultados = null, sair = process.exit, tetoMs = 15000 }) {
+function criarGerenciador({ runDir, exportarResultados = null, sair = process.exit, tetoMs = 15000, janelaTardiasMs = 250 }) {
   let execucao = null; // ÚNICA Promise do encerramento (chamadas concorrentes aguardam a mesma operação)
   const rotinas = []; // encerramentos de recursos registrados (servidores, painel, CDP...)
+  let encerrando = false;
+  let acordar = null; // sinaliza chegada de rotina tardia ao drenador
 
-  // Drena a fila em ordem LIFO: o painel (registrado depois) fecha antes de
-  // Playwright/CDP, aguardando servidores e operações em andamento.
-  const drenar = async () => {
+  // Executa cada rotina sob o prazo global; rotina lenta/eterna NUNCA trava
+  // a limpeza (a Promise pendente é abandonada — o sair() encerra o processo).
+  const drenar = async teto => {
     while (rotinas.length) {
       const fn = rotinas.pop();
-      try { await fn(); } catch { /* recurso já fechado: seguir com a limpeza */ }
+      try { await Promise.race([Promise.resolve().then(fn), teto]); } catch { /* recurso já fechado: seguir com a limpeza */ }
     }
   };
 
   return {
-    /** Registra o encerramento de um recurso ativo. Seguro durante a limpeza:
-     *  será drenado pela própria operação em andamento (nunca abandonado). */
+    /** Registra o encerramento de um recurso ativo. Durante o encerramento a
+     *  fila segue aberta e controlada: a rotina tardia acorda o drenador e é
+     *  encerrada imediatamente, dentro do MESMO prazo global (não depende de
+     *  ticks nem de Promise.resolve()). */
     aoEncerrar(fn) {
-      if (typeof fn === 'function') rotinas.push(fn);
+      if (typeof fn !== 'function') return;
+      rotinas.push(fn);
+      if (encerrando && acordar) acordar();
     },
     /** Encerramento completo. Idempotente; retorna a mesma Promise a cada chamada. */
     encerrar(codigo = 0) {
       if (execucao) return execucao;
+      encerrando = true;
+      const inicio = Date.now();
+      const prazofinal = inicio + tetoMs;
       execucao = (async () => {
-        // 1. Encerra recursos registrados.
-        await drenar();
-        // 2. Recursos registrados DEPOIS do início do encerramento: cede um
-        //    tick para os registros e drena de novo, com teto de tempo para a
-        //    saída nunca ficar presa.
-        await Promise.resolve();
+        // Prazo GLOBAL: criado AGORA, cobre recursos iniciais, tardios e a
+        // exportação. unref: o processo nunca fica preso só pelo timer.
         const teto = new Promise(resolve => {
           const t = setTimeout(resolve, tetoMs);
           if (t.unref) t.unref();
         });
-        await Promise.race([drenar(), teto]);
-        // 3. Exporta apenas o que precisa sobreviver; 4. remove dados sensíveis.
-        try { if (exportarResultados) exportarResultados(); } catch { /* melhor esforço */ }
+        // 1. Encerra recursos registrados ANTES do início, sob o prazo global.
+        await drenar(teto);
+        // 2. Janela controlada para registros tardios: cada aoEncerrar acorda
+        //    o drenador imediatamente; a fila fecha só quando a janela acaba
+        //    sem novos registros (ou no prazo).
+        const fimJanela = Date.now() + janelaTardiasMs;
+        while (Date.now() < fimJanela && Date.now() < prazofinal) {
+          const sinal = new Promise(r => { acordar = r; });
+          await Promise.race([sinal, new Promise(r => setTimeout(r, fimJanela - Date.now()))]);
+          acordar = null;
+          await drenar(teto);
+        }
+        // 3. Exporta apenas o que precisa sobreviver — AGUARDADA, dentro do
+        //    mesmo prazo; 4. remove dados sensíveis depois da exportação
+        //    (ou do prazo, se ela estourar).
+        if (exportarResultados) {
+          try { await Promise.race([Promise.resolve().then(exportarResultados), teto]); } catch { /* melhor esforço */ }
+        }
         try { fs.rmSync(runDir, { recursive: true, force: true }); } catch { /* melhor esforço */ }
-        // 5. Sai somente depois da limpeza concluída (ou teto); sem exit antecipado.
+        // 5. Sai somente depois da limpeza concluída (ou prazo); sem exit antecipado.
         sair(codigo);
       })();
       return execucao;

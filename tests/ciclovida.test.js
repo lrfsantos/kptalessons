@@ -183,3 +183,122 @@ test('evidências não contêm dados pessoais (apenas contagens e estágios)', (
     assert.ok(!linha.includes(proibido), `dado pessoal vazado: ${proibido}`);
   }
 });
+
+// ---- Rodada 4, item 1: prazo GLOBAL único do encerramento ----------------
+
+test('prazo global: recurso inicial que nunca resolve não prende o encerramento', async () => {
+  const dir = runDirFicticia();
+  const g = criarGerenciador({ runDir: dir, sair: () => {}, tetoMs: 300 });
+  let concluiu = false;
+  g.aoEncerrar(() => new Promise(() => {})); // eterno
+  const t0 = Date.now();
+  await g.encerrar().then(() => { concluiu = true; });
+  assert.equal(concluiu, true, 'encerramento concluiu mesmo com recurso eterno');
+  assert.ok(Date.now() - t0 < 5000, 'não ficou preso no prazo (prazo ~300ms)');
+  assert.equal(fs.existsSync(dir), false, 'runDir removida mesmo com recurso pendente');
+});
+
+test('prazo global é criado no INÍCIO do encerramento, antes da 1ª drenagem', async () => {
+  // Antes da correção, o teto só nascia depois da 1ª drenagem: um recurso
+  // inicial eterno bloqueava indefinidamente. Agora o deadline cobre tudo.
+  const dir = runDirFicticia();
+  const g = criarGerenciador({ runDir: dir, sair: () => {}, tetoMs: 250 });
+  g.aoEncerrar(() => new Promise(() => {})); // registrado antes do encerrar()
+  const t0 = Date.now();
+  await g.encerrar();
+  const duracao = Date.now() - t0;
+  assert.ok(duracao < 2000, `encerramento respeitou o prazo global (${duracao}ms)`);
+  assert.equal(fs.existsSync(dir), false);
+});
+
+test('recurso inicial que termina antes do prazo é aguardado por completo', async () => {
+  const dir = runDirFicticia();
+  const marcas = [];
+  const g = criarGerenciador({ runDir: dir, sair: () => marcas.push('saiu'), tetoMs: 10000 });
+  g.aoEncerrar(async () => { await new Promise(r => setTimeout(r, 80)); marcas.push('lento'); });
+  await g.encerrar();
+  assert.deepEqual(marcas, ['lento', 'saiu'], 'rotina concluiu antes do prazo e foi aguardada');
+});
+
+test('recurso registrado DURANTE outra rotina não fica abandonado', async () => {
+  const dir = runDirFicticia();
+  const fechados = [];
+  const g = criarGerenciador({ runDir: dir, sair: () => {}, tetoMs: 5000 });
+  g.aoEncerrar(async () => {
+    fechados.push('A');
+    g.aoEncerrar(async () => { fechados.push('B'); }); // registro dentro de outra rotina
+  });
+  await g.encerrar();
+  assert.ok(fechados.includes('B'), 'rotina registrada por outra rotina foi executada');
+  assert.equal(fs.existsSync(dir), false);
+});
+
+test('recurso registrado no limite da janela de tardios é drenado', async () => {
+  const dir = runDirFicticia();
+  let fechado = false;
+  const g = criarGerenciador({ runDir: dir, sair: () => {}, tetoMs: 5000, janelaTardiasMs: 400 });
+  const p = g.encerrar();
+  setTimeout(() => g.aoEncerrar(async () => { fechado = true; }), 250); // dentro da janela
+  await p;
+  assert.equal(fechado, true, 'rotina tardia no limite da janela foi encerrada');
+  assert.equal(fs.existsSync(dir), false);
+});
+
+test('exportação assíncrona é aguardada ANTES da remoção do runDir', async () => {
+  const dir = runDirFicticia();
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'cna-resultados-'));
+  try {
+    const destino = path.join(pasta, 'revisao.md');
+    const g = criarGerenciador({
+      runDir: dir,
+      exportarResultados: async () => {
+        await new Promise(r => setTimeout(r, 80)); // exportação demorada
+        fs.copyFileSync(path.join(dir, 'revisao.md'), destino);
+      },
+      sair: () => {},
+    });
+    await g.encerrar();
+    assert.equal(fs.existsSync(destino), true, 'conteúdo exportado antes da limpeza');
+    assert.equal(fs.existsSync(dir), false, 'runDir removida depois da exportação');
+  } finally {
+    fs.rmSync(pasta, { recursive: true, force: true });
+  }
+});
+
+test('falha de exportação não impede a limpeza nem a saída', async () => {
+  const dir = runDirFicticia();
+  const codigos = [];
+  const g = criarGerenciador({
+    runDir: dir,
+    exportarResultados: async () => { throw new Error('exportação quebrou'); },
+    sair: c => codigos.push(c),
+  });
+  await g.encerrar(0);
+  assert.deepEqual(codigos, [0], 'saiu mesmo com exportação falha');
+  assert.equal(fs.existsSync(dir), false);
+});
+
+test('múltiplas chamadas simultâneas com recurso eterno recebem a mesma Promise e não ficam presas', async () => {
+  const dir = runDirFicticia();
+  let saidas = 0;
+  const g = criarGerenciador({ runDir: dir, sair: () => saidas++, tetoMs: 250 });
+  g.aoEncerrar(() => new Promise(() => {}));
+  const [a, b] = await Promise.all([g.encerrar(), g.encerrar()]);
+  assert.equal(a, b);
+  assert.equal(saidas, 1);
+  assert.equal(fs.existsSync(dir), false);
+});
+
+test('limpeza do diretório ocorre mesmo com rotina falha + exportação falha + recurso eterno', async () => {
+  const dir = runDirFicticia();
+  const g = criarGerenciador({
+    runDir: dir,
+    exportarResultados: () => { throw new Error('boom'); },
+    sair: () => {},
+    tetoMs: 250,
+  });
+  g.aoEncerrar(() => { throw new Error('rotina quebra de imediato'); });
+  g.aoEncerrar(() => new Promise(() => {})); // eterna
+  await g.encerrar();
+  assert.equal(fs.existsSync(dir), false, 'runDir removida apesar de todas as falhas');
+});
