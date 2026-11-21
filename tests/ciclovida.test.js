@@ -61,16 +61,25 @@ test('revisão manual é exportada para a pasta de resultados do professor', asy
 test('limpeza de residuais preserva execução ativa e remove abandonada', () => {
   const ativa = runDirFicticia();
   const abandonada = runDirFicticia();
-  // Simula execução ativa: arquivo aberto impede o rename no Windows.
-  const trava = fs.openSync(path.join(ativa, 'answers.json'), 'r');
-  limparExecucoesAbandonadas('cna-corretor-run-test-');
-  assert.equal(fs.existsSync(abandonada), false, 'abandonada removida');
-  assert.equal(fs.existsSync(ativa), true, 'ativa preservada');
-  fs.closeSync(trava);
-  // Segunda execução (nova limpeza) agora remove a antiga, provando que a
-  // preservação não é permanente.
-  limparExecucoesAbandonadas('cna-corretor-run-test-');
-  assert.equal(fs.existsSync(ativa), false);
+  if (process.platform === 'win32') {
+    // Simula execução ativa: arquivo aberto impede o rename no Windows
+    // (rename-exclusivo como prova de abandono - produção é Windows-only).
+    const trava = fs.openSync(path.join(ativa, 'answers.json'), 'r');
+    limparExecucoesAbandonadas('cna-corretor-run-test-');
+    assert.equal(fs.existsSync(abandonada), false, 'abandonada removida');
+    assert.equal(fs.existsSync(ativa), true, 'ativa preservada');
+    fs.closeSync(trava);
+    // Segunda execução (nova limpeza) agora remove a antiga, provando que a
+    // preservação não é permanente.
+    limparExecucoesAbandonadas('cna-corretor-run-test-');
+    assert.equal(fs.existsSync(ativa), false);
+  } else {
+    // POSIX não bloqueia rename com arquivo aberto; sem a trava do Windows.
+    // Valida aqui o parâmetro excluir, mecanismo real do orquestrador.
+    limparExecucoesAbandonadas('cna-corretor-run-test-', ativa);
+    assert.equal(fs.existsSync(abandonada), false, 'abandonada removida');
+    assert.equal(fs.existsSync(ativa), true, 'ativa preservada (excluir)');
+  }
 });
 
 test('fecharServidor impede novas requisições e aguarda as em andamento', async () => {
