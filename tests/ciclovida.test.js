@@ -355,3 +355,25 @@ test('prazo esgotado é um estado distinto quando a rotina nunca termina', async
   await g.encerrar();
   assert.equal(g.estadoFila, 'prazo-esgotado');
 });
+
+// ---- Rodada 6, item 3: nada NOVO começa depois do prazo ------------------
+
+test('após o prazo: rotina seguinte e exportação NÃO são iniciadas (3 rotinas)', async () => {
+  const dir = runDirFicticia();
+  const iniciadas = [];
+  const g = criarGerenciador({
+    runDir: dir,
+    exportarResultados: () => { iniciadas.push('exportacao'); },
+    sair: () => {},
+    tetoMs: 120,
+    janelaTardiasMs: 5,
+  });
+  // Ordem de execução é LIFO: a eterna é registrada por último e roda primeiro.
+  g.aoEncerrar(() => { iniciadas.push('segunda'); });
+  g.aoEncerrar(() => { iniciadas.push('terceira'); });
+  g.aoEncerrar(() => { iniciadas.push('primeira'); return new Promise(() => {}); });
+  await g.encerrar();
+  assert.equal(g.estadoFila, 'prazo-esgotado');
+  assert.deepEqual(iniciadas, ['primeira'], 'só a rotina já iniciada começou; segunda/terceira e exportação NÃO');
+  assert.equal(fs.existsSync(dir), false, 'limpeza final ainda ocorreu');
+});

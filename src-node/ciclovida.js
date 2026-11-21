@@ -38,8 +38,9 @@ function criarGerenciador({ runDir, exportarResultados = null, sair = process.ex
 
   // Executa cada rotina sob o prazo global; rotina lenta/eterna NUNCA trava
   // a limpeza (a Promise pendente é abandonada — o sair() encerra o processo).
+  // Rodada 6, item 3: depois do prazo NÃO iniciar novas rotinas da fila.
   const drenar = async teto => {
-    while (rotinas.length) {
+    while (rotinas.length && estadoFila !== 'prazo-esgotado') {
       const fn = rotinas.pop();
       try { await Promise.race([Promise.resolve().then(fn), teto]); } catch { /* recurso já fechado: seguir com a limpeza */ }
     }
@@ -82,7 +83,7 @@ function criarGerenciador({ runDir, exportarResultados = null, sair = process.ex
         //    o drenador imediatamente; a fila fecha só quando a janela acaba
         //    sem novos registros (ou no prazo).
         const fimJanela = Date.now() + janelaTardiasMs;
-        while (Date.now() < fimJanela && Date.now() < prazofinal) {
+        while (estadoFila !== 'prazo-esgotado' && Date.now() < fimJanela && Date.now() < prazofinal) {
           const sinal = new Promise(r => { acordar = r; });
           await Promise.race([sinal, new Promise(r => setTimeout(r, fimJanela - Date.now()))]);
           acordar = null;
@@ -92,7 +93,9 @@ function criarGerenciador({ runDir, exportarResultados = null, sair = process.ex
         // 3. Exporta apenas o que precisa sobreviver — AGUARDADA, dentro do
         //    mesmo prazo; 4. remove dados sensíveis depois da exportação
         //    (ou do prazo, se ela estourar).
-        if (exportarResultados) {
+        // Prazo esgotado: só a limpeza final abaixo e a saída. Nenhuma
+        // exportação é INICIADA depois do prazo (rodada 6, item 3).
+        if (estadoFila !== 'prazo-esgotado' && exportarResultados) {
           try { await Promise.race([Promise.resolve().then(exportarResultados), teto]); } catch { /* melhor esforço */ }
         }
         try { fs.rmSync(runDir, { recursive: true, force: true }); } catch { /* melhor esforço */ }
