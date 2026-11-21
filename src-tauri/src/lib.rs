@@ -82,14 +82,18 @@ fn cleanup_stale_profiles(own: &Path) {
 /// WebView2 escolher uma porta livre e registrá-la ali). Primeira linha
 /// do arquivo é a porta; segunda, o caminho do endpoint do browser.
 fn wait_cdp_port(profile: &Path, timeout: Duration) -> Result<u16, String> {
-    let file = profile.join("DevToolsActivePort");
+    // O WebView2 cria uma subpasta EBWebView dentro da pasta de dados;
+    // o arquivo pode ficar em <perfil>/DevToolsActivePort ou <perfil>/EBWebView/DevToolsActivePort.
+    let candidates = [profile.join("DevToolsActivePort"), profile.join("EBWebView").join("DevToolsActivePort")];
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
-        if let Ok(content) = fs::read_to_string(&file) {
-            if let Some(first) = content.lines().next() {
-                if let Ok(port) = first.trim().parse::<u16>() {
-                    if port != 0 {
-                        return Ok(port);
+        for file in candidates.iter() {
+            if let Ok(content) = fs::read_to_string(file) {
+                if let Some(first) = content.lines().next() {
+                    if let Ok(port) = first.trim().parse::<u16>() {
+                        if port != 0 {
+                            return Ok(port);
+                        }
                     }
                 }
             }
@@ -98,7 +102,7 @@ fn wait_cdp_port(profile: &Path, timeout: Duration) -> Result<u16, String> {
     }
     Err(format!(
         "DevToolsActivePort não apareceu em {} dentro de {}s",
-        file.display(),
+        candidates[0].display(),
         timeout.as_secs()
     ))
 }
