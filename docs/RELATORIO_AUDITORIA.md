@@ -1,9 +1,10 @@
-# Relatório para Auditoria — Migração Tauri + WebView2 (janela única, fluxo real, Fluent)
+﻿# Relatório para Auditoria — Migração Tauri + WebView2 (janela única, fluxo real, Fluent)
 
 **Data:** 2026-11-21
 **Branch:** `feat/tauri-webview2-real-flow-fluent` (52+ commits a partir de `master` = `3f2145b`; contagem atualizada na seção 15)
 **PR:** https://github.com/lrfsantos/kptalessons/pull/1 — aberto, **sem merge** (aguarda auditoria)
-**Status do CI na escrita deste relatório:** matriz Node 22/24 × Ubuntu/Windows **verde**; job Windows de build NSIS reexecutando após correção de toolchain (detalhe na seção 8).
+**Status do CI na escrita deste relatório:** matriz Node 22/24 × Ubuntu/Windows **verde**, incluindo o job Windows com build NSIS obrigatório e upload do instalador (concluído; detalhes nas seções 8 e 16).
+**Estado consolidado:** as seções anteriores são o histórico de cada rodada; o estado FINAL (números de testes, CI/NSIS e validações físicas) está na **seção 16**.
 
 ---
 
@@ -336,21 +337,22 @@ Data: 21/11/2026. Branch: feat/tauri-webview2-real-flow-fluent (PR #1, sem merge
 
 ### Pendências físicas
 
+> **Atualização (rodada 6):** o registro histórico desta seção foi superado — CI/NSIS e as validações físicas reais estão concluídas e relacionadas na seção 16. Fora de escopo permanecem apenas a máquina limpa sem WebView2 e o fluxo com login real (proibido nesta auditoria).
+
 - Executar push e confirmar CI verde: matriz Node 22/24 (Ubuntu/Windows), job Windows com cargo + build NSIS + upload do instalador (tamanho a confirmar no artefato).
 - Teste físico da queda do sidecar: matar o processo node com o app aberto em cada tela e verificar o overlay global na UI real (WebView2) — o mecanismo de injeção (`webview.eval` em página remota) precisa de confirmação física.
 - Teste físico do ciclo completo (login manual no portal real) — como nas rodadas anteriores, depende de sessão real do professor e segue fora do escopo automatizado.
 
 ---
 
-## 16. Rodada 5 — correção final dos bloqueadores de segurança
+## 16. Rodadas 5 e 6 — encerramento da auditoria de código
 
 **Data:** 2026-11-21
-**Branch:** `feat/tauri-webview2-real-flow-fluent` (sem merge; PR #1 segue aberto)
-**HEAD funcional antes desta seção:** `31d43a7` (o commit que registra esta seção é o HEAD final — ver `git log -1`)
-**Sem push nesta rodada:** quem orquestra faz push e acompanha o CI.
-**Escopo:** 2 P0 + 3 P1 do prompt do auditor (`docs/PROMPT_RODADA5.md`, commitado nesta seção). Nenhuma alteração de rubrica, painel, copiar/colar/validar ou da regra de finalização automática. Nada de portal real, conta real ou Finalizar real — só fixtures/mocks.
+**Branch:** `feat/tauri-webview2-real-flow-fluent` (sem merge; PR #1 segue aberto; sem push e sem force push)
+**HEAD funcional antes desta seção:** `2b43af7` (o commit que registra esta seção é o HEAD final — ver `git log -1`)
+**Escopo:** rodada 5 (`docs/PROMPT_RODADA5.md`): 2 P0 + 3 P1; rodada 6 (`docs/PROMPT_RODADA6.md`): 2 P1 + 2 P2. Nenhuma alteração de arquitetura Tauri/WebView2, UI Fluent, parser de lotes, rubrica, copiar/colar, login manual ou da política de finalização automática. Nada de portal real, conta real, dados reais de alunos ou `Finalizar` real — só fixtures e mocks.
 
-### Commits criados (um por item)
+### Commits da rodada 5
 
 | Hash | Item | Conteúdo |
 |------|------|----------|
@@ -358,35 +360,63 @@ Data: 21/11/2026. Branch: feat/tauri-webview2-real-flow-fluent (PR #1, sem merge
 | `6caa748` | 2 (P0) | `AbortController`/`AbortSignal` compartilhado: `saude.js` aborta no `disconnected`, o orquestrador passa o sinal ao executor; `applyAcceptedCorrections` verifica cancelamento antes de iniciar/navegar, antes de preencher, imediatamente antes de finalizar e antes de continuar; restantes vão para revisão, `appliedRefs` só com confirmação, cancelamento nunca vira `APPLICATION_COMPLETED`. Testes de integração com mocks. |
 | `30c0cd9` | 3 (P1) | Rust: motivo de fim por GERAÇÃO (`Arc<AtomicU8>` em `SidecarState`), marcado em `parar_sidecar` ANTES do shutdown/kill por timeout; `estado_no_eof(pronto, motivo)` devolve `None` para encerramento normal e reinicialização; queda inesperada/falha de inicialização continuam gerando overlay. EOF tardio da geração antiga não silencia falha da nova. |
 | `31d43a7` | 4 (P1) | `ciclovida.js`: identificador do timer do prazo guardado e `clearTimeout()` ao concluir; estados explícitos `aberta → encerrando → fechada → prazo-esgotado`; registro pós-fechamento tem política definida (não entra na fila, aviso no log). Testes de comportamento, inclusive processo filho que só sai se o timer foi limpo. |
-| (este) | 5 + docs | Testes de integração dos três pontos principais já incluídos nos commits acima; seção 16 e prompt da rodada 5. |
 
-### Arquivos modificados
+### Commits da rodada 6
 
-- `poc-ui/falha-global.js`, `tests/falha-global.test.js`
-- `executor.js`, `src-node/saude.js`, `src-node/orquestrador.js`, `tests/executor-cancel.test.js` (NOVO)
-- `src-tauri/src/lib.rs`
+| Hash | Item | Conteúdo |
+|------|------|----------|
+| `78ee208` | docs | Prompt da rodada 6 (`docs/PROMPT_RODADA6.md`) commitado antes do código. |
+| `2f1773c` | 1 (P1) | Orquestrador: após `applyAcceptedCorrections()`, verifica `controlador.signal.aborted`; se abortado, registra as contagens confirmadas nas evidências e retorna SEM `panel.setPhase('done')`, SEM conclusão e SEM `APPLICATION_COMPLETED`. Novo teste de integração `tests/orquestrador-cancel.test.js` executa o PRÓPRIO `src-node/orquestrador.js` (via `vm`, mocks só nas bordas de E/S, `AbortController` e `vigiarConexao` reais): desconexão durante a aplicação → nenhum `APPLICATION_COMPLETED`; controle saudável → conclusão emitida. Também corrige o typo latente `panelPort`/`painelPort` no log `CNA_PORTS`, que causava `ReferenceError` e interrompia o fluxo antes da aplicação. |
+| `8ad9620` | 2 (P1) | Rust: `HandshakeSinal` por geração + `aguardar_handshake()` com timeout controlado; `reiniciar_sidecar`/`iniciar_sidecar` só retornam `Ok(())` depois de `CNA_SIDECAR_READY` + `CNA_CDP_CONECTADO`; em falha encerram o novo processo marcando o EOF como reinício (sem overlay falso) e retornam `Err` — o invoke rejeita e a UI mantém a mensagem de falha de recuperação. Overlay testado com invoke pendente (não libera a página) e invoke rejeitado (mantém a mensagem). 3 testes Rust novos. |
+| `2b43af7` | 3 (P2) | `ciclovida.js`: depois do prazo global a fila não inicia novas rotinas e a exportação não é iniciada; apenas limpeza final e saída. Teste com três rotinas: a primeira nunca resolve; a segunda (e a terceira) e a exportação não começam. |
+| (este) | 4 (P2) | Relatório atualizado (números, validações físicas, defeitos descobertos) e descrição do PR #1 corrigida via API do GitHub com UTF-8 legível. |
+
+### Arquivos modificados na rodada 6
+
+- `src-node/orquestrador.js`, `tests/orquestrador-cancel.test.js` (NOVO)
+- `src-tauri/src/lib.rs`, `tests/falha-global.test.js`
 - `src-node/ciclovida.js`, `tests/ciclovida.test.js`
-- `docs/PROMPT_RODADA5.md` (NOVO), `docs/RELATORIO_AUDITORIA.md` (esta seção)
+- `docs/PROMPT_RODADA6.md` (NOVO), `docs/RELATORIO_AUDITORIA.md` (esta seção)
+
+### Defeitos descobertos e corrigidos nesta rodada
+
+- **`b5239fa` (empacotamento):** o instalador NSIS iniciava com overlay fatal porque `resources/` não continha os módulos da raiz exigidos pelo orquestrador (`login.js`, `scraper.js`, `executor.js`, `corrigir.js`, `instrucoes_correcao.md`). Corrigido em `b5239fa` (`scripts/poc-package-resources.ps1`, `src-tauri/tauri.conf.json`, `tests/pacote.test.js`); após reempacotar, `cargo check`/`cargo test` passaram nesta rodada (102,07 MB de recursos).
+- **`panelPort`/`painelPort` (typo latente, introduzido em `021901a`):** `const panelPort` era declarado mas `painelPort` usado no log `CNA_PORTS` → `ReferenceError` interrompia o fluxo logo após o painel, antes da aplicação. Corrigido em `2f1773c`; descoberto pelo novo teste de integração do orquestrador — nenhum teste anterior executava esse caminho.
 
 ### Resultados de testes locais (executados nesta rodada)
 
 | Suite | Resultado |
 |-------|-----------|
-| `npm test` (Node) | **295 testes: 294 pass, 0 fail, 1 skipped** (skip pré-existente); eram 283 → **12 testes novos** |
-| `cargo fmt --check` (src-tauri) | **OK** (após `cargo fmt` aplicar uma quebra de linha; reexecutado sem diffs) |
-| `cargo check` (src-tauri) | **OK** (rodado depois de `scripts\poc-package-resources.ps1`, **102,02 MB** de recursos) |
-| `cargo test` (src-tauri) | **OK: 9 passed, 0 failed** (7 anteriores + 2 novos de EOF intencional/gerações) |
+| `npm test` (Node) | **303 testes: 302 pass, 0 fail, 1 skipped** (skip pré-existente). Antes da rodada 6: **298**. A numeração antiga desta seção (295) estava obsoleta — corrigida. **+5 testes novos** na rodada 6. |
+| `cargo fmt --check` (src-tauri) | **OK** |
+| `cargo check` (src-tauri) | **OK** — executado DEPOIS de `scripts\poc-package-resources.ps1` (102,07 MB de recursos; node.exe 88,53 MB; playwright-core 13,32 MB) |
+| `cargo test` (src-tauri) | **OK: 12 passed, 0 failed** (9 anteriores + 3 novos de handshake) |
 
-### Provas por item
+### Classificação dos testes (unitário / integrado / CI / físico)
 
-- **P0 — bloqueio real pelo overlay (item 1):** `tests/falha-global.test.js` dispara eventos no DOM falso e verifica COMPORTAMENTO: `keydown` num botão focado por baixo tem `preventDefault`+`stopPropagation`, handlers de teclado e a ação do botão NÃO rodam; `submit` de formulário por baixo não chega ao handler; teclado no botão de recuperação do overlay NÃO é bloqueado; `inert` é aplicado à página e restaurado (`false`) só depois de `reiniciar_sidecar` resolver, com os listeners removidos e o clique voltando a funcionar.
-- **P0 — cancelamento do executor (item 2):** `tests/executor-cancel.test.js` usa retorno de lote fictício com duas PRONTAS e stubs do portal: (a) queda após a 1ª finalização confirmada → 1 navegação, 1 `Finalizar`, `stats.finalizadasNestaExecucao = 1`, `appliedRefs = [ref1]`, 2ª atividade em revisão "não iniciada", evento `FLUXO_ERRO`/`ERRO_CONEXAO_PERDIDA` e nenhum `APPLICATION_COMPLETED`; (b) queda depois de preencher e antes de finalizar → `Finalizar` NUNCA chamado, `appliedRefs` vazio; (c) integração `browser.emit('disconnected')` → sinal compartilhado abortado, `encerrar(1)`, nenhuma finalização nova; (d) sem cancelamento, as duas PRONTAS seguem sendo finalizadas — regra de negócio inalterada.
-- **P1 — falso overlay (item 3):** `estado_no_eof(true/false, FIM_ENCERRAMENTO)` e `(... FIM_REINICIACAO)` retornam `None` (nenhum overlay); `(true, FIM_EM_EXECUCAO)` = `FALHA_SIDECAR` e `(false, ...)` = `FALHA_INICIALIZACAO`; teste de geração prova que marcar a antiga como reinício não impede o overlay da nova se ela cair. `parar_sidecar` marca o motivo antes de escrever `shutdown` e antes do `kill` por timeout, cobrindo a distinção também no caminho de timeout.
-- **P1 — prazo e fila tardia (item 4):** processo filho com teto de 60s termina em <8s (só sai se `clearTimeout` tiver limpo o timer); transições `aberta → encerrando → fechada` observadas por getter; registro pós-fechamento não é executado e gera aviso explícito; `prazo-esgotado` é estado distinto quando a rotina nunca termina.
-- **P1 — integração (item 5):** coberta nos três pontos acima, com mocks e fixtures; nenhum dado real ou atividade real foi tocada.
+- **Unitário:** `tests/ciclovida.test.js`, `tests/falha-global.test.js` (DOM falso, `estado_no_eof`, allowlist), `tests/pacote.test.js`, `aguardar_handshake` em Rust etc. — verificam uma função/regra isolada.
+- **Integrado:** `tests/orquestrador-cancel.test.js` (fluxo REAL do orquestrador, mocks só nas bordas de E/S), `tests/executor-cancel.test.js`, `tests/integracao.test.js` (módulos reais ligados: telas, navegação, painel, ciclovida, saúde).
+- **CI:** `.github/workflows/tests.yml` — matriz Node 22/24 × Ubuntu/Windows (`npm test`, `npm audit --audit-level=high`) + job Windows (empacotamento de resources, `cargo fmt --check`, `cargo check`, `cargo test`, build NSIS obrigatório e upload do artefato). **Verde**, sem `continue-on-error`.
+- **Físico:** execução do instalador NSIS e do fluxo na WebView2 real (evidências abaixo) — não substituído por teste automatizado.
 
-### Pendências de validação física
+### Validações físicas reais concluídas (não são mais pendências)
 
-- Push e CI: matriz Node 22/24 (Ubuntu/Windows) e job Windows com cargo + build NSIS + upload do instalador.
-- Queda real do sidecar (matar o processo com o app aberto) e reinício pelo botão do overlay na WebView2 real.
-- Instalação NSIS real e fluxo completo no portal — somente com autorização, sem atividades reais para finalização.
+- **CI verde:** matriz Node 22/24 em Ubuntu/Windows + job Windows Tauri, todos os jobs `success` (registro em `docs/POC_TAURI_RELATORIO_FINAL.md`, run #19; estado atual também no cabeçalho deste relatório).
+- **Build NSIS obrigatório:** instalador `.exe` gerado pelo job Windows e disponível como artefato, sem `continue-on-error`.
+- **Instalador executado (produto instalado):** aberto pelo atalho do Menu Iniciar, E2E completo em ~5 s com evidências em `%TEMP%\cna-poc-evidencias-1795212847283` — sidecar invisível, portal na mesma janela, HTTP 422 no retorno inválido, HTTP 200 no válido (`done: true`), 0 navegadores externos (`docs/POC_TAURI_RELATORIO_FINAL.md`).
+- **Overlay de falha observado no instalado:** o smoke do produto instalado revelou o overlay fatal do defeito de empacotamento `b5239fa`; após a correção, os recursos foram reempacotados e `cargo check`/`cargo test` passaram nesta rodada.
+- **Rede do CDP:** `netstat` mostrou `TCP 127.0.0.1:62867 LISTENING` — endpoint vinculado somente ao loopback; conexões do painel também em `127.0.0.1`.
+
+### Provas por item (rodada 6)
+
+- **Item 1 (P1):** `tests/orquestrador-cancel.test.js` executa o orquestrador real: a desconexão durante a aplicação aborta o sinal compartilhado (`FLUXO_ERRO`/`ERRO_CONEXAO_PERDIDA`, `encerrar(1)`), o executor emite `APPLICATION_FAILED` e **zero** `APPLICATION_COMPLETED`; a fase `done` não é marcada. Teste de controle sem desconexão emite `APPLICATION_COMPLETED` e marca `done` — prova de que o harness exercita o caminho real.
+- **Item 2 (P1):** `aguardar_handshake` só retorna quando `sidecar_pronto && cdp_conectado`; testes Rust provam que não resolve apenas com `pronto`, falha rápido no EOF antes de pronto e respeita timeout controlado. No JS, invoke pendente mantém o overlay e o botão desabilitado; invoke rejeitado mantém overlay e mensagem de falha. O kill do novo processo é marcado como `FIM_REINICIACAO`, não gerando overlay falso (`eof_intencional_nao_gera_overlay_de_falha`).
+- **Item 3 (P2):** teste das três rotinas: a eterna inicia; após o prazo, a segunda/terceira e a exportação **não** iniciam (`iniciadas === ['primeira']`), a RUN_DIR ainda é removida e o estado final é `prazo-esgotado`.
+- **Item 4 (P2):** esta seção e a descrição do PR #1 (UTF-8 legível via API do GitHub).
+
+### Fora do escopo automatizado (limitações conhecidas — não declaradas como concluídas)
+
+- Máquina limpa sem WebView2 (bootstrapper do instalador) — não validada (`docs/POC_TAURI_RELATORIO_FINAL.md`).
+- Fluxo completo com login real no portal — depende de sessão do professor e é proibido nesta auditoria (só fixtures/mocks).
+
+**Encerramento:** os quatro pontos da rodada 6 passaram sem regressão (`npm test` 298 → 303, `cargo fmt/check/test` OK). Auditada sem Rodada 7.
