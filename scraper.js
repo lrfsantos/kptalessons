@@ -168,7 +168,7 @@ function collectActivities({ page, onlyPending = true, loteSize = 10, onProgress
 
     // 4. Gera os lotes MD (nonce novo + INJECT em cada lote) e salva a
     //    identidade da coleta junto com os dados estruturados (T12).
-    const { nonce, files, total } = md.buildBatches(classes, { loteSize });
+    const { nonce, files, total } = md.buildBatches(classes, { loteSize, outDir: CFG.LOTES_DIR });
     const collection = {
       id: generatedAt,
       nonce,
