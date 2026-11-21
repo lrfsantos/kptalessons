@@ -186,3 +186,33 @@ Revisar o PR (commits individuais), validar o checklist da seção 9 (pelo
 menos: testes, grep de credenciais, build NSIS), opinar sobre o risco CDP
 (seção 3/11) e apontar qualquer bloqueio antes do merge. Nada foi mesclado;
 `master` e a pasta da POC permanecem intocados.
+
+## 13. Rodada 2 - resposta ao prompt de 14 itens do auditor
+
+Data: 21/11/2026. Branch: feat/tauri-webview2-real-flow-fluent (PR #1, sem merge).
+
+| # | Item do auditor | Status | Evidencia |
+|---|---|---|---|
+| 2 | Armazenamento temporario de dados dos alunos | Feito (rodada 1, commit 6b6e4e7) | Lifecycle manager; teste: limpeza no finally, dirs abandonadas por rename-lock |
+| 3 | Mensagens falsas de demonstracao | Feito | index/progresso/conclusao com textos reais; aviso de demo so em modo=demonstracao (chamado pelo ladocar de demo) |
+| 4 | Codificacao UTF-8 | Feito | tests/encoding.test.js: 11 arquivos de interface sem mojibake + strings-chave; suite Node 228/0 |
+| 5 | CSP nas paginas locais | Feito (rodada 1, commit 8ec1d7d) | CSP estrita em todas as respostas HTTP; painel.js extraido; painel.js agora empacotado (poc-package-resources.ps1) |
+| 6 | Reinicializacao/monitoramento do sidecar | Feito | src-tauri/src/lib.rs: comando reiniciar_sidecar; deteccao de queda; handshake de portas |
+| 7 | Registro de portas x navegacao | Feito | protocolo dinamico de portas no orchestrator (commits 82b5525/f5ad28f) |
+| 8 | Progresso real na interface | Feito | progresso.js consome estado real do sidecar |
+| 9 | Rubrica proporcional + idioma | Feito | instrucoes_correcao.md: Rubrica 75/50/49 com reducao proporcional, regra de idioma (autocorreto = erro de grafia; frase substantiva em portugues impede CORRETO); limites centralizados em lib/notas.js (75/50); guard.js: triagem contextual (2+ sinais, 12% do texto, isencao para texto curto) |
+| 10 | Identidade do aplicativo | Feito (9d715e6) | productName "Corretor CNA", identifier com.cna.corretor, metadados Cargo reais; janela exibiu "Corretor CNA" no teste fisico |
+| 11 | UI Fluent | Feito | fluent.css design system; Mica/Acrylic segue como limitacao documentada (superficies solidas) |
+| 12 | Testes | Feito | 228 Node/0 falhas; 3 Rust/0; cargo fmt --check ok; CI verde no ultimo push (runs 38/39) |
+| 13 | Teste manual seguro | Parcial | Fisico: app abriu (titulo "Corretor CNA"), fechou graciosamente, %TEMP%\cna-poc-webview2-* removido na saida, nenhum node.exe orfao. NAO clicado Iniciar (nenhum login real no portal); nenhuma atividade real finalizada. Limitacao registrada |
+| 14 | Entrega | Este commit | Commits separados: 5a32426 (textos/encoding/metricas), 9d715e6 (identidade) |
+
+### Higiene da maquina (solicitado pelo usuario)
+
+- %TEMP% tinha 1228 pastas orfas cna-* (15 MB) deixadas por rodadas de teste - removidas manualmente.
+- Pendencia real detectada: os testes Node criam dirs temporarias e nem todas removem no fim (fonte do acumulo). Candidato a correcao na proxima rodada.
+
+### Limitacoes remanescentes
+
+- CI desta rodada roda apos o push destes commits; confirmacao do build NSIS pendente ate la.
+- Teste manual sem Iniciar: fluxo de coleta/aplicacao nao exercitado fisicamente nesta rodada.
