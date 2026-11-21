@@ -23,15 +23,18 @@
 
     <main class="conteudo">
       <section class="cartao">
-        <h1>Validação concluída</h1>
-        <p id="resumo">A resposta da IA passou pela validação estrutural.</p>
-        <div class="metricas" style="margin-top:20px">
-          <div class="metrica"><strong id="aceitos">1</strong><span>Lotes aceitos</span></div>
-          <div class="metrica"><strong id="rejeitados">0</strong><span>Lotes rejeitados</span></div>
+        <h1>Correção concluída</h1>
+        <p id="resumo">Resumo da execução abaixo.</p>
+        <div class="metricas margem-topo">
+          <div class="metrica"><strong id="finalizadas">0</strong><span>Atividades finalizadas</span></div>
+          <div class="metrica"><strong id="jaCorrigidas">0</strong><span>Já estavam corrigidas</span></div>
+          <div class="metrica"><strong id="revisao">0</strong><span>Para revisão manual</span></div>
+          <div class="metrica"><strong id="falhas">0</strong><span>Falhas de finalização</span></div>
         </div>
+        <p class="secundario margem-topo" id="pastaResultados" hidden></p>
       </section>
 
-      <div class="aviso atencao" role="note" style="margin-top:16px">
+      <div class="aviso atencao margem-topo" role="note" id="avisoFinal">
         <strong>Demonstração:</strong>&nbsp;nenhuma atividade real foi alterada ou finalizada
         no portal. Os dados usados aqui são fictícios.
       </div>

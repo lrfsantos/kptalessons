@@ -82,29 +82,8 @@ function evento(event, detail = {}) {
 }
 
 // --- telas locais (início/progresso/conclusão) -------------------------
-const PAGES = {
-  '/': path.join(BASE, 'poc-ui', 'index.html'),
-  '/progresso': path.join(BASE, 'poc-ui', 'progresso.html'),
-  '/conclusao': path.join(BASE, 'poc-ui', 'conclusao.html'),
-  '/styles.css': path.join(BASE, 'poc-ui', 'styles.css'),
-  '/fluent.css': path.join(BASE, 'poc-ui', 'fluent.css'),
-  '/app.js': path.join(BASE, 'poc-ui', 'app.js'),
-  '/progresso.js': path.join(BASE, 'poc-ui', 'progresso.js'),
-  '/conclusao.js': path.join(BASE, 'poc-ui', 'conclusao.js'),
-};
-const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
-
-const server = http.createServer((req, res) => {
-  const url = new URL(req.url, 'http://127.0.0.1');
-  const file = PAGES[url.pathname];
-  if (!file || !fs.existsSync(file)) { res.writeHead(404); res.end('não encontrado'); return; }
-  res.writeHead(200, {
-    'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
-    'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff',
-  });
-  fs.createReadStream(file).pipe(res);
-});
+const { criarServidorTelas } = require(path.join(__dirname, 'telas.js'));
+const server = criarServidorTelas();
 
 // --- CDP ---------------------------------------------------------------
 async function conectar(cdpPort) {

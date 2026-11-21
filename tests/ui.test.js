@@ -29,11 +29,13 @@ test('painel mantém bind local, token e serviço sem telemetria', () => {
   assert.match(panel, /server\.listen\(0, '127\.0\.0\.1'/);
   assert.match(panel, /crypto\.randomBytes\(18\)/);
   assert.match(panel, /'Cache-Control': 'no-store'/);
-  assert.ok(!/telemetr|analytics|google-analytics|gtag/i.test(html), 'sem telemetria no cliente');
-  assert.match(html, /fetch\(base \+ path/, 'fetch apenas para a API local do painel');
+  const cliente = html + fs.readFileSync(path.join(__dirname, '..', 'ui', 'painel.js'), 'utf8');
+  assert.ok(!/telemetr|analytics|google-analytics|gtag/i.test(cliente), 'sem telemetria no cliente');
+  assert.match(cliente, /fetch\(base \+ path/, 'fetch apenas para a API local do painel');
 });
 
 test('mensagens de resultado distinguem aceite parcial', () => {
-  assert.match(html, /const partial = rejected\.length > 0/);
-  assert.match(html, /partial \? 'warn' : 'good'/);
+  const cliente = html + fs.readFileSync(path.join(__dirname, '..', 'ui', 'painel.js'), 'utf8');
+  assert.match(cliente, /const partial = rejected\.length > 0/);
+  assert.match(cliente, /partial \? 'warn' : 'good'/);
 });

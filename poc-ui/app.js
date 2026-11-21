@@ -9,10 +9,9 @@ function mostrarErro(mensagem) {
   div.innerHTML = '<strong>Falha na inicialização.</strong> ';
   div.appendChild(document.createTextNode(mensagem || 'Tente novamente.'));
   const btn = document.createElement('button');
-  btn.className = 'botao primario';
+  btn.className = 'botao primario margem-topo';
   btn.type = 'button';
   btn.textContent = 'Tentar novamente';
-  btn.style.marginTop = '12px';
   btn.addEventListener('click', function () {
     if (window.__TAURI__ && window.__TAURI__.core) {
       window.__TAURI__.core.invoke('reiniciar_sidecar').then(function () {

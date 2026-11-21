@@ -29,6 +29,10 @@ p { margin: 0 0 var(--espaco-3); }
 
 .botao { padding: 10px 20px; min-height: var(--altura-controle-grande); border-radius: var(--raio-controle); }
 
+/* Utilidades de espaçamento (substituem estilos inline; CSP estrita) */
+.margem-topo { margin-top: var(--espaco-4); }
+.nota-rodape { margin-top: var(--espaco-4); font-size: .9rem; }
+
 .rodape {
   padding: var(--espaco-4) var(--espaco-6);
   border-top: 1px solid var(--borda);
