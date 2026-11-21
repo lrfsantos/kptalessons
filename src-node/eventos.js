@@ -43,7 +43,7 @@ const CAMPOS = new Set([
 const REGRAS_CODIGO = [
   [/timed?\s?out|timeout|excediu/i, 'ERRO_TEMPO_ESGOTADO'],
   [/net::|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|ERR_CONNECTION|ERR_NAME|ERR_INTERNET/i, 'ERRO_REDE'],
-  [/target closed|browser closed|page closed|session closed|context closed|detached|disconnected|EPIPE|EPERM/i, 'ERRO_CONEXAO_PERDIDA'],
+  [/target closed|browser closed|page closed|session closed|context closed|detached|disconnected|conexão perdida|EPIPE|EPERM/i, 'ERRO_CONEXAO_PERDIDA'],
 ];
 
 const MENSAGENS_ERRO = {
