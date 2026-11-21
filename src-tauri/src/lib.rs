@@ -170,14 +170,16 @@ fn spawn_sidecar(base: &Path, cdp_port: u16) -> Result<(Child, std::process::Chi
         .arg(cdp_port.to_string())
         .current_dir(base)
         .stdin(Stdio::piped())
-        .stdout(Stdio::piped())  // protocolo estruturado; nada espelhado na UI
+        .stdout(Stdio::piped()) // protocolo estruturado; nada espelhado na UI
         .stderr(Stdio::piped()); // diagnóstico; vai para o log local, não para a UI
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
-    let mut child = cmd.spawn().map_err(|e| format!("falha ao iniciar o node empacotado: {e}"))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("falha ao iniciar o node empacotado: {e}"))?;
     let stdin = child.stdin.take().expect("stdin pipado");
     Ok((child, stdin))
 }
@@ -186,7 +188,9 @@ fn spawn_sidecar(base: &Path, cdp_port: u16) -> Result<(Child, std::process::Chi
 /// eventos; demais linhas (log técnico) NÃO vão para a interface.
 /// EOF no stdout (processo morreu antes do handshake) => FALHA na UI.
 fn watch_sidecar_stdout(app: tauri::AppHandle, child: &mut Child, ports: Arc<Mutex<HashSet<u16>>>) {
-    let Some(stdout) = child.stdout.take() else { return };
+    let Some(stdout) = child.stdout.take() else {
+        return;
+    };
     std::thread::spawn(move || {
         let mut pronto = false;
         for line in BufReader::new(stdout).lines() {
@@ -195,8 +199,12 @@ fn watch_sidecar_stdout(app: tauri::AppHandle, child: &mut Child, ports: Arc<Mut
                 pronto = true;
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(rest) {
                     let mut set = ports.lock().unwrap();
-                    if let Some(p) = v["demoPort"].as_u64() { set.insert(p as u16); }
-                    if let Some(p) = v["panelPort"].as_u64() { set.insert(p as u16); }
+                    if let Some(p) = v["demoPort"].as_u64() {
+                        set.insert(p as u16);
+                    }
+                    if let Some(p) = v["panelPort"].as_u64() {
+                        set.insert(p as u16);
+                    }
                     let _ = app.emit("app-estado", ("SIDECAR_PRONTO", rest));
                 }
             } else if line.starts_with("CNA_CDP_CONECTADO") {
@@ -206,7 +214,11 @@ fn watch_sidecar_stdout(app: tauri::AppHandle, child: &mut Child, ports: Arc<Mut
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(rest) {
                     let mut set = ports.lock().unwrap();
                     if let Some(arr) = v["ports"].as_array() {
-                        for p in arr { if let Some(p) = p.as_u64() { set.insert(p as u16); } }
+                        for p in arr {
+                            if let Some(p) = p.as_u64() {
+                                set.insert(p as u16);
+                            }
+                        }
                     }
                 }
             } else if let Some(rest) = line.strip_prefix("CNA_EVENT ") {
@@ -240,7 +252,10 @@ fn shutdown_sidecar(state: &State<'_, SidecarState>) {
         let mut guard = state.child.lock().unwrap();
         match guard.as_mut() {
             Some(child) => match child.try_wait() {
-                Ok(Some(_)) => { guard.take(); break; }
+                Ok(Some(_)) => {
+                    guard.take();
+                    break;
+                }
                 Ok(None) if Instant::now() >= deadline => {
                     let _ = child.kill();
                     let _ = child.wait();
@@ -248,7 +263,10 @@ fn shutdown_sidecar(state: &State<'_, SidecarState>) {
                     break;
                 }
                 Ok(None) => drop(guard),
-                Err(_) => { guard.take(); break; }
+                Err(_) => {
+                    guard.take();
+                    break;
+                }
             },
             None => break,
         }
@@ -270,7 +288,11 @@ fn shutdown_sidecar(state: &State<'_, SidecarState>) {
 // ----------------------------------------------------------------
 
 #[tauri::command]
-fn reiniciar_sidecar(app: tauri::AppHandle, state: State<'_, SidecarState>, base_dir: State<'_, BaseDir>) -> Result<(), String> {
+fn reiniciar_sidecar(
+    app: tauri::AppHandle,
+    state: State<'_, SidecarState>,
+    base_dir: State<'_, BaseDir>,
+) -> Result<(), String> {
     let base = base_dir.0.clone();
     emit_estado(&app, "INICIANDO", "{}");
     iniciar_sidecar(app, &state, &base)
@@ -278,12 +300,20 @@ fn reiniciar_sidecar(app: tauri::AppHandle, state: State<'_, SidecarState>, base
 
 struct BaseDir(PathBuf);
 
-fn iniciar_sidecar(app: tauri::AppHandle, state: &State<'_, SidecarState>, base: &Path) -> Result<(), String> {
+fn iniciar_sidecar(
+    app: tauri::AppHandle,
+    state: &State<'_, SidecarState>,
+    base: &Path,
+) -> Result<(), String> {
     let cdp_port = wait_cdp_port(&state.profile_dir, Duration::from_secs(30))?;
     let (mut child, stdin) = spawn_sidecar(base, cdp_port)?;
     watch_sidecar_stdout(app.clone(), &mut child, state.local_ports.clone());
-    if let Ok(mut g) = state.child.lock() { *g = Some(child); }
-    if let Ok(mut g) = state.stdin.lock() { *g = Some(stdin); }
+    if let Ok(mut g) = state.child.lock() {
+        *g = Some(child);
+    }
+    if let Ok(mut g) = state.stdin.lock() {
+        *g = Some(stdin);
+    }
     Ok(())
 }
 
@@ -322,10 +352,16 @@ pub fn run() {
         })
         .setup(move |app| {
             let base = if cfg!(debug_assertions) {
-                PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().expect("src-tauri sem pai").to_path_buf()
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .expect("src-tauri sem pai")
+                    .to_path_buf()
             } else {
                 // Produção: recursos em <exe>\resources (layout padrão do Tauri).
-                std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join("resources"))).unwrap_or_else(|| PathBuf::from("."))
+                std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(|d| d.join("resources")))
+                    .unwrap_or_else(|| PathBuf::from("."))
             };
             app.manage(BaseDir(base.clone()));
 
@@ -341,7 +377,11 @@ pub fn run() {
             let win = match win {
                 Ok(w) => w,
                 Err(e) => {
-                    emit_estado(app.handle(), "FALHA_INICIALIZACAO", &format!("{{\"mensagem\":\"Falha ao criar a janela: {e}\"}}"));
+                    emit_estado(
+                        app.handle(),
+                        "FALHA_INICIALIZACAO",
+                        &format!("{{\"mensagem\":\"Falha ao criar a janela: {e}\"}}"),
+                    );
                     return Ok(());
                 }
             };
