@@ -71,14 +71,18 @@ function exportarResultadosProfessor() {
 const EVIDENCE_DIR = path.join(RUN_DIR, 'evidencias');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 const LOG_FILE = path.join(EVIDENCE_DIR, 'evidencias.jsonl');
+const { sanitizarEvento, sanitizarExcecao } = require(path.join(__dirname, 'eventos.js'));
 function log(event, detail = {}) {
-  try { fs.appendFileSync(LOG_FILE, JSON.stringify({ ts: new Date().toISOString(), event, ...detail }) + '\n', 'utf8'); } catch { /* best effort */ }
+  // Esquema fechado: campos fora da allowlist nunca chegam às evidências.
+  const e = sanitizarEvento(event, detail);
+  try { fs.appendFileSync(LOG_FILE, JSON.stringify({ ts: new Date().toISOString(), event: e.event, ...e.detail }) + '\n', 'utf8'); } catch { /* best effort */ }
 }
 
-// Protocolo estruturado com o Rust (nunca dados pessoais).
+// Protocolo estruturado com o Rust (nunca dados pessoais; esquema fechado).
 function evento(event, detail = {}) {
-  console.log('CNA_EVENT ' + JSON.stringify({ event, ...detail }));
-  log(event, detail);
+  const e = sanitizarEvento(event, detail);
+  console.log('CNA_EVENT ' + JSON.stringify(e));
+  log(e.event, e.detail);
 }
 
 // --- telas locais (início/progresso/conclusão) -------------------------
@@ -257,8 +261,8 @@ server.listen(0, '127.0.0.1', async () => {
   try {
     await rodarFluxo(demoPort);
   } catch (e) {
-    // Mensagem humana; detalhes técnicos ficam só nas evidências locais.
-    log('fluxo-erro', { mensagem: e.message });
+    // Mensagem humana sanitizada; detalhes técnicos ficam só nas evidências locais.
+    log('fluxo-erro', sanitizarExcecao(e));
     evento('APPLICATION_FAILED', { etapa: 'fluxo' });
     try {
       const { page } = await primeiroProcessoWeb(await conectar(CDP_PORT));
