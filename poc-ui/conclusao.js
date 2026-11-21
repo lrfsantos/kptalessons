@@ -5,7 +5,7 @@ if (q.get('modo') === 'vazio') {
   resumo.textContent = 'Não há atividades pendentes. Tudo em dia!';
 } else if (q.get('erro')) {
   resumo.textContent = q.get('erro');
-  resumo.style.color = 'var(--erro-texto)';
+  resumo.style.color = 'var(--erro)';
 } else {
   const atualizar = (id, param) => {
     if (q.get(param) != null) document.getElementById(id).textContent = q.get(param);

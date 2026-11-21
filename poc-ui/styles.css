@@ -1,170 +1,43 @@
-/* Corretor CNA — tokens e base (Material Design 3 simplificado) */
-:root {
-  --fundo: #F6F8F8;
-  --superficie: #FFFFFF;
-  --texto: #172B35;
-  --texto-sec: #5B6973;
-  --primario: #0F6157;
-  --primario-forte: #0A4A42;
-  --sucesso-fundo: #E8F3ED;
-  --sucesso-texto: #0F6157;
-  --atencao-fundo: #FFF4DE;
-  --atencao-texto: #7A5B12;
-  --erro-fundo: #FCECEC;
-  --erro-texto: #8C2F2F;
-  --borda: #DEE5E8;
-  --raio: 14px;
-  --raio-sm: 10px;
-  --sombra: 0 1px 2px rgba(23, 43, 53, .06), 0 4px 16px rgba(23, 43, 53, .06);
-  --esp-1: 4px; --esp-2: 8px; --esp-3: 12px; --esp-4: 16px;
-  --esp-5: 24px; --esp-6: 32px; --esp-7: 48px;
-}
+/* ============================================================
+   Corretor CNA — layout das telas (usa o design system fluent.css)
+   ============================================================ */
+@import url("./fluent.css");
 
-* { box-sizing: border-box; }
-
-html, body {
-  margin: 0;
-  min-height: 100%;
-  background: var(--fundo);
-  color: var(--texto);
-  font-family: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
-  font-size: 16px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
-.app {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
+.app { min-height: 100vh; display: flex; flex-direction: column; }
 
 .topo {
-  padding: var(--esp-5) var(--esp-6);
+  padding: var(--espaco-4) var(--espaco-6);
   border-bottom: 1px solid var(--borda);
-  background: var(--superficie);
+  background: var(--camada);
   display: flex;
   align-items: center;
-  gap: var(--esp-4);
-}
-
-.marca {
-  width: 44px; height: 44px;
-  border-radius: 12px;
-  background: var(--primario);
-  display: grid; place-items: center;
-  flex: none;
+  gap: var(--espaco-3);
 }
 .marca svg { display: block; }
-
-.titulo-app { font-size: 1.15rem; font-weight: 650; letter-spacing: -.01em; }
-.subtitulo-app { color: var(--texto-sec); font-size: .9rem; }
 
 .conteudo {
   flex: 1;
   width: 100%;
   max-width: 980px;
   margin: 0 auto;
-  padding: var(--esp-6) var(--esp-5);
+  padding: var(--espaco-6) var(--espaco-5);
 }
 
-.cartao {
-  background: var(--superficie);
-  border: 1px solid var(--borda);
-  border-radius: var(--raio);
-  box-shadow: var(--sombra);
-  padding: var(--esp-6);
-}
+.cartao + .cartao { margin-top: var(--espaco-4); }
+p { margin: 0 0 var(--espaco-3); }
+.aviso { margin-top: var(--espaco-4); }
 
-.cartao + .cartao { margin-top: var(--esp-4); }
-
-h1 { font-size: 1.7rem; line-height: 1.2; margin: 0 0 var(--esp-3); letter-spacing: -.02em; }
-h2 { font-size: 1.15rem; margin: 0 0 var(--esp-3); }
-p { margin: 0 0 var(--esp-3); }
-.secundario { color: var(--texto-sec); }
-
-.botao {
-  appearance: none;
-  border: 1px solid var(--borda);
-  background: var(--superficie);
-  color: var(--texto);
-  font: inherit;
-  font-weight: 600;
-  padding: 12px 22px;
-  border-radius: 999px;
-  cursor: pointer;
-  min-height: 48px;
-  transition: background-color .15s ease, border-color .15s ease;
-}
-.botao:hover { background: #EFF3F4; }
-.botao:focus-visible { outline: 3px solid rgba(15, 97, 87, .35); outline-offset: 2px; }
-.botao.primario { background: var(--primario); border-color: var(--primario); color: #fff; }
-.botao.primario:hover { background: var(--primario-forte); }
-
-.aviso {
-  display: flex; gap: var(--esp-3);
-  align-items: flex-start;
-  border-radius: var(--raio-sm);
-  padding: var(--esp-4);
-  font-size: .92rem;
-}
-.aviso.info { background: var(--sucesso-fundo); color: var(--sucesso-texto); }
-.aviso.atencao { background: var(--atencao-fundo); color: var(--atencao-texto); }
-
-.etapas { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--esp-3); }
-.etapas li { display: flex; align-items: center; gap: var(--esp-3); color: var(--texto-sec); }
-.etapas li.ativa { color: var(--texto); font-weight: 600; }
-.etapas li.pronta { color: var(--sucesso-texto); }
-.etapa-icone {
-  width: 26px; height: 26px; flex: none;
-  border-radius: 50%;
-  border: 2px solid var(--borda);
-  display: grid; place-items: center;
-  font-size: .8rem;
-}
-.etapas li.pronta .etapa-icone { border-color: var(--primario); background: var(--primario); color: #fff; }
-.etapas li.ativa .etapa-icone { border-color: var(--primario); position: relative; }
-.etapas li.ativa .etapa-icone::after {
-  content: "";
-  position: absolute; inset: -6px;
-  border-radius: 50%;
-  border: 2px solid rgba(15, 97, 87, .25);
-}
-
-.progresso-indeterminado {
-  height: 6px; border-radius: 999px;
-  background: var(--borda);
-  overflow: hidden;
-  position: relative;
-}
-.progresso-indeterminado::before {
-  content: "";
-  position: absolute; top: 0; bottom: 0; left: -40%; width: 40%;
-  background: var(--primario);
-  border-radius: 999px;
-  animation: varrer 1.4s ease-in-out infinite;
-}
-@keyframes varrer { to { left: 100%; } }
-
-@media (prefers-reduced-motion: reduce) {
-  .progresso-indeterminado::before { animation: none; left: 0; width: 100%; opacity: .35; }
-  * { transition: none !important; }
-}
-
-.metricas { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--esp-4); }
-.metrica { background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio-sm); padding: var(--esp-4); }
-.metrica strong { display: block; font-size: 1.6rem; color: var(--primario); }
-.metrica span { color: var(--texto-sec); font-size: .9rem; }
+.botao { padding: 10px 20px; min-height: var(--altura-controle-grande); border-radius: var(--raio-controle); }
 
 .rodape {
-  padding: var(--esp-4) var(--esp-6);
+  padding: var(--espaco-4) var(--espaco-6);
   border-top: 1px solid var(--borda);
-  color: var(--texto-sec);
+  color: var(--texto-2);
   font-size: .85rem;
-  background: var(--superficie);
+  background: var(--camada);
 }
 
 @media (max-width: 640px) {
-  .topo, .conteudo, .rodape { padding-left: var(--esp-4); padding-right: var(--esp-4); }
-  h1 { font-size: 1.4rem; }
+  .topo, .conteudo, .rodape { padding-left: var(--espaco-4); padding-right: var(--espaco-4); }
+  .cartao { padding: var(--espaco-5); }
 }

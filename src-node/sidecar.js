@@ -55,6 +55,7 @@ const PAGES = {
   '/progresso': path.join(BASE, 'poc-ui', 'progresso.html'),
   '/conclusao': path.join(BASE, 'poc-ui', 'conclusao.html'),
   '/styles.css': path.join(BASE, 'poc-ui', 'styles.css'),
+  '/fluent.css': path.join(BASE, 'poc-ui', 'fluent.css'),
   '/app.js': path.join(BASE, 'poc-ui', 'app.js'),
   '/progresso.js': path.join(BASE, 'poc-ui', 'progresso.js'),
   '/conclusao.js': path.join(BASE, 'poc-ui', 'conclusao.js'),

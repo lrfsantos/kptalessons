@@ -12,14 +12,16 @@ test('painel mantém todos os elementos usados pelo script', () => {
 });
 
 test('painel usa layout responsivo moderno e sem fontes externas', () => {
-  assert.match(html, /max-width:min\(/);
-  assert.match(html, /repeat\(auto-fit,minmax\(/);
-  assert.match(html, /clamp\(/);
-  assert.match(html, /overflow-wrap:anywhere/);
-  assert.match(html, /white-space:pre-wrap/);
-  assert.match(html, /@media \(max-width:620px\)/);
-  assert.ok(!/https?:\/\//.test(html), 'sem recursos externos');
-  assert.ok(!/grid-template-columns:\s*repeat\(3/.test(html), 'sem grade fixa de 3 colunas');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'ui', 'painel.css'), 'utf8');
+  const estilos = html + css;
+  assert.match(estilos, /max-width:\s*min\(/);
+  assert.match(estilos, /repeat\(auto-fill,\s*minmax\(/);
+  assert.match(estilos, /clamp\(/);
+  assert.match(estilos, /overflow-wrap:\s*anywhere/);
+  assert.match(estilos, /white-space:\s*pre-wrap/);
+  assert.match(estilos, /@media \(max-width:\s*620px\)/);
+  assert.ok(!/https?:\/\//.test(html + css), 'sem recursos externos');
+  assert.ok(!/grid-template-columns:\s*repeat\(3/.test(estilos), 'sem grade fixa de 3 colunas');
 });
 
 test('painel mantém bind local, token e serviço sem telemetria', () => {

@@ -27,6 +27,7 @@
       "resources/src-node/**/*",
       "resources/lib/**/*",
       "resources/ui/painel.html",
+      "resources/ui/painel.css",
       "resources/poc-ui/**/*",
       "resources/node_modules/playwright-core/**/*"
     ],
