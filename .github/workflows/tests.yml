@@ -63,6 +63,9 @@ jobs:
       - name: cargo check (Tauri)
         working-directory: src-tauri
         run: cargo check
+      - name: cargo test (Tauri)
+        working-directory: src-tauri
+        run: cargo test
       - name: Build installer (NSIS obrigatório)
         working-directory: src-tauri
         run: npx --yes @tauri-apps/cli@2 build
