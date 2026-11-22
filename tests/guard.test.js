@@ -51,6 +51,23 @@ test('resposta alterada pela IA vai para revisão', () => {
   assert.ok(v.reasons.some(x => x.includes('resposta do aluno alterada')));
 });
 
+// "(vazia)" é o placeholder do lote para resposta em branco (md.entryBlock);
+// a IA o repete fielmente — convenção de formato, não alteração (auditoria
+// do stress test 520). Negativo: resposta NÃO vazia devolvida como (vazia)
+// continua sendo divergência.
+test('resposta em branco devolvida como placeholder (vazia) é aceita', () => {
+  const vazio = { question: 'Write 3 sentences.', answer: '' };
+  const v = validateEntry({ classification: 'INCORRETO', score: 0, feedback: 'Please complete the task and resubmit it.', pergunta: vazio.question, respostaLida: '(vazia)' }, vazio);
+  assert.equal(v.review, false);
+  assert.deepEqual(v.reasons, []);
+});
+
+test('resposta não vazia devolvida como (vazia) continua rejeitada', () => {
+  const v = validateEntry({ classification: 'INCORRETO', score: 0, feedback: 'Ok.', pergunta: original.question, respostaLida: '(vazia)' }, original);
+  assert.equal(v.review, true);
+  assert.ok(v.reasons.some(x => x.includes('resposta do aluno alterada')));
+});
+
 // Rigorosa: caracteres invisíveis inseridos pela IA continuam detectados.
 // O U+200B da captura do portal é sanitizado em lib/portal.js, não aqui.
 test('IA inserindo caractere invisível na resposta vai para revisão', () => {
