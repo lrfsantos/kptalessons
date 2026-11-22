@@ -133,8 +133,9 @@ merge, push ou force push.
   - `painel: cliente desativa controles e avisa quando a coleta está inconsistente` — o cliente
     desativa copiar/validar/importar/limpar e exibe a instrução, e o HTML já entrega os controles
     desativados antes da primeira leitura de estado.
-- `cargo fmt --check`, `cargo check` e `cargo test` após `scripts\poc-package-resources.ps1`: ver
-  resultado registrado por quem orquestra (executados nesta rodada antes da entrega).
+- Após `scripts\poc-package-resources.ps1` (recursos de 102,07 MB empacotados em
+  `src-tauri/resources/`, diretório ignorado pelo Git): `cargo fmt --check` ok,
+  `cargo check` ok e `cargo test` ok (12 testes Rust aprovados, 0 falhas).
 - Working tree limpa ao final; nenhum push realizado.
 
 ## 7. Pendências para a validação física final
