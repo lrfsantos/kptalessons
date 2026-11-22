@@ -15,15 +15,14 @@ serviço — é uma decisão e uma ação suas, não do aplicativo.
 
 ### 1. Baixe o instalador
 
-O aplicativo **não está no código-fonte do repositório**. Ele é gerado pelo GitHub Actions:
+**👉 [Baixar o instalador do Corretor CNA (Windows 64 bits)](https://github.com/lrfsantos/kptalessons/releases/latest)**
 
-1. Abra a página de execuções do workflow:
-   [GitHub → Actions → testes / build Tauri](https://github.com/lrfsantos/kptalessons/actions/workflows/tests.yml?query=branch%3Afeat%2Ftauri-webview2-real-flow-fluent)
-   (ou `https://github.com/lrfsantos/kptalessons/actions`).
-2. Filtre pela branch `feat/tauri-webview2-real-flow-fluent` e abra a **execução mais recente
-   bem-sucedida**.
-3. No fim da página, em **Artifacts**, baixe o artefato **`corretor-cna-nsis`** (gerado pelo job
-   `tauri-app`). Extraia o `.zip`: ele contém o instalador `.exe`.
+O link acima abre a página **Releases** do GitHub, onde o arquivo
+`Corretor-CNA-0.1.0-x64-setup.exe` está em *Assets* (seção de downloads). Se preferir, acesse diretamente
+[a página da versão v0.1.0](https://github.com/lrfsantos/kptalessons/releases/tag/v0.1.0).
+
+O aplicativo **não está no código-fonte do repositório** — ele é publicado como instalador na
+Release acima.
 
 > Se você baixou o repositório em `.zip` e encontrou `Corrigir.cmd`, `preflight.js` ou uma pasta
 > `distribuicao/`, pare: isso é **código antigo de desenvolvimento**, não é o produto. Nada disso
@@ -31,9 +30,8 @@ O aplicativo **não está no código-fonte do repositório**. Ele é gerado pelo
 
 ### 2. Instale
 
-1. Extraia o `.zip` do artefato em uma pasta qualquer (por exemplo, *Downloads*).
-2. Dê duplo clique no `.exe` (instalador NSIS) e siga as telas: **Avançar → Instalar → Concluir**.
-3. O instalador cria o atalho **Corretor CNA** no Menu Iniciar. Não é preciso configurar Node,
+1. Dê duplo clique no `.exe` baixado (geralmente em *Downloads*) e siga as telas: **Avançar → Instalar → Concluir**.
+2. O instalador cria o atalho **Corretor CNA** no Menu Iniciar. Não é preciso configurar Node,
    Playwright, Chromium, variáveis de ambiente nem abrir terminal.
 
 Requisito: Windows com o **WebView2 Runtime** (já presente no Windows 11 e nas instalações
