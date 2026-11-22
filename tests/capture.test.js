@@ -44,6 +44,17 @@ test('enunciado dividido entre frase complementar e instrução principal, na or
   assert.ok(q.indexOf('Refer to the poster') < q.indexOf('Write a paragraph'));
 });
 
+// Caso real: o portal injeta U+200B na resposta capturada; se fosse
+// devolvido ao lote, a IA o removeria e a validação acusaria falso positivo.
+test('captura remove U+200B da resposta e do enunciado', () => {
+  const d = read({
+    instruction: 'Write three sentences.\u200b',
+    answer: '\u200bMococa is smaller than São Paulo.',
+  });
+  assert.equal(d.answer, 'Mococa is smaller than São Paulo.');
+  assert.equal(d.instruction, 'Write three sentences.');
+});
+
 test('exemplo real: "Reflect on a recent personal achievement." preservado junto da instrução', () => {
   const d = read({
     context: 'Reflect on a recent personal achievement.',
