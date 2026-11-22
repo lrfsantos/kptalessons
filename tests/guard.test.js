@@ -51,6 +51,15 @@ test('resposta alterada pela IA vai para revisão', () => {
   assert.ok(v.reasons.some(x => x.includes('resposta do aluno alterada')));
 });
 
+// Rigorosa: caracteres invisíveis inseridos pela IA continuam detectados.
+// O U+200B da captura do portal é sanitizado em lib/portal.js, não aqui.
+test('IA inserindo caractere invisível na resposta vai para revisão', () => {
+  for (const ch of ['\u200b', '\u200c', '\u200d', '\u202e']) {
+    const v = validateEntry({ classification: 'CORRETO', score: 90, feedback: 'Ok.', pergunta: original.question, respostaLida: original.answer + ch }, original);
+    assert.equal(v.review, true, `caractere ${ch.codePointAt(0).toString(16)} deveria ir para revisão`);
+  }
+});
+
 test('enunciado alterado pela IA vai para revisão', () => {
   const v = validateEntry({ classification: 'PARCIAL', score: 70, feedback: 'Ok.', pergunta: 'pergunta mudada', respostaLida: original.answer }, original);
   assert.equal(v.review, true);
