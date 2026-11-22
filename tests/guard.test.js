@@ -51,6 +51,13 @@ test('resposta alterada pela IA vai para revisão', () => {
   assert.ok(v.reasons.some(x => x.includes('resposta do aluno alterada')));
 });
 
+// Caso real: portal captura U+200B na resposta e a IA o remove ao devolver.
+test('caracteres invisíveis da captura não causam falso positivo', () => {
+  const original = { question: '\u200bWrite 3 sentences about your weekend.', answer: '\u200bMococa is smaller than São Paulo.' };
+  const v = validateEntry({ classification: 'CORRETO', score: 90, feedback: 'Ok.', pergunta: 'Write 3 sentences about your weekend.', respostaLida: 'Mococa is smaller than São Paulo.' }, original);
+  assert.equal(v.review, false);
+});
+
 test('enunciado alterado pela IA vai para revisão', () => {
   const v = validateEntry({ classification: 'PARCIAL', score: 70, feedback: 'Ok.', pergunta: 'pergunta mudada', respostaLida: original.answer }, original);
   assert.equal(v.review, true);
