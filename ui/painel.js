@@ -49,6 +49,24 @@ async function refresh() {
   try {
     const state = await api('/api/state');
     lastState = state;
+    if (state.consistent === false) {
+      // Coleta incompleta: nenhum botão pode parecer pronto para uso.
+      $('batchProgress').textContent = '—';
+      $('progressBar').style.width = '0%';
+      $('phase').textContent = 'Dados incompletos';
+      $('phase').className = 'phase is-bad';
+      $('batches').replaceChildren();
+      $('copyAll').disabled = true;
+      $('submit').disabled = true;
+      $('fileInput').disabled = true;
+      $('clear').disabled = true;
+      $('complete').classList.add('hidden');
+      notice('Os dados desta correção estão incompletos. Feche o aplicativo e inicie uma nova correção.', 'bad');
+      return;
+    }
+    $('fileInput').disabled = false;
+    $('clear').disabled = false;
+    $('submit').disabled = false;
     $('total').textContent = state.totalActivities;
     $('received').textContent = state.receivedActivities;
     $('batchProgress').textContent = state.receivedBatches + ' / ' + state.batchCount;
@@ -92,6 +110,7 @@ async function refresh() {
 }
 $('copyAll').addEventListener('click', async () => {
   try {
+    if (lastState && lastState.consistent === false) return;
     const pending = (lastState && lastState.batches ? lastState.batches : []).filter(b => !b.received);
     if (!pending.length) return;
     const docs = await Promise.all(pending.map(b => api('/api/batch/' + b.num)));
@@ -121,7 +140,7 @@ $('submit').addEventListener('click', async () => {
   } catch (e) {
     notice(e.message, 'bad');
   } finally {
-    $('submit').disabled = false;
+    $('submit').disabled = !!(lastState && lastState.consistent === false);
     $('submit').textContent = 'Validar e receber retorno';
   }
 });

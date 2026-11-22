@@ -31,7 +31,7 @@
   <section class="section" aria-labelledby="step1">
     <div class="section-head">
       <h2 id="step1"><span class="step">1</span>Envie os lotes para sua IA</h2>
-      <button id="copyAll" type="button">Copiar todos os lotes</button>
+      <button id="copyAll" type="button" disabled>Copiar todos os lotes</button>
     </div>
     <p class="hint">Copie um lote por vez ou todos juntos. Para modelos gratuitos, recomendamos um lote por vez.</p>
     <div class="batch-list" id="batches"></div>
@@ -44,12 +44,12 @@
     <div class="entry-controls">
       <div class="left">
         <label class="file-button" for="fileInput">Importar arquivo .md</label>
-        <input id="fileInput" class="hidden" type="file" accept=".md,.markdown,.txt,text/plain,text/markdown">
-        <button id="clear" type="button">Limpar campo</button>
+        <input id="fileInput" class="hidden" type="file" accept=".md,.markdown,.txt,text/plain,text/markdown" disabled>
+        <button id="clear" type="button" disabled>Limpar campo</button>
         <span class="count" id="charCount">0 caracteres</span>
       </div>
       <div class="right">
-        <button class="primary" id="submit" type="button">Validar e receber retorno</button>
+        <button class="primary" id="submit" type="button" disabled>Validar e receber retorno</button>
       </div>
     </div>
     <div id="result" class="notice hidden" role="status" aria-live="polite"></div>

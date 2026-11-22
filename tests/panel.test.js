@@ -200,3 +200,67 @@ test('painel: arquivo existente inválido é colocado em rejeitados e pode ser c
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('painel: lote ausente orienta a encerrar e iniciar uma nova correção', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cna-panel-missing-'));
+  const lots = path.join(root, 'lotes');
+  const returns = path.join(root, 'retornos-da-IA');
+  fs.mkdirSync(lots, { recursive: true });
+  const panel = await createPanel({
+    collection: { nonce, batches: [{ num: 1, name: 'lote-01.md', refs: [ref1], total: 1 }] },
+    lotesDir: lots, returnsDir: returns,
+  });
+  try {
+    const res = await fetch(panel.url.replace(/\/$/, '/api/batch/1'));
+    assert.equal(res.status, 404);
+    const data = await res.json();
+    assert.match(data.error, /Feche o aplicativo e inicie uma nova correção/);
+    assert.ok(!/Arquivo original/i.test(data.error), 'sem jargão técnico na mensagem');
+  } finally {
+    await panel.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('painel: estado inicial sinaliza inconsistência quando falta arquivo de lote', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cna-panel-health-'));
+  const lots = path.join(root, 'lotes');
+  const returns = path.join(root, 'retornos-da-IA');
+  fs.mkdirSync(lots, { recursive: true });
+  fs.writeFileSync(path.join(lots, 'lote-01.md'), 'lote 1 original');
+  const panel = await createPanel({
+    collection: {
+      nonce,
+      batches: [
+        { num: 1, name: 'lote-01.md', refs: [ref1], total: 1 },
+        { num: 2, name: 'lote-02.md', refs: [ref2], total: 1 },
+      ],
+    },
+    lotesDir: lots, returnsDir: returns,
+  });
+  const stateUrl = panel.url.replace(/\/$/, '/api/state');
+  try {
+    const inicial = await (await fetch(stateUrl)).json();
+    assert.equal(inicial.consistent, false, 'lote 2 ausente → coleta inconsistente');
+    assert.equal(inicial.done, false, 'estado inconsistente nunca conclui');
+    assert.equal(inicial.batchCount, 2);
+    fs.writeFileSync(path.join(lots, 'lote-02.md'), 'lote 2 original');
+    const corrigido = await (await fetch(stateUrl)).json();
+    assert.equal(corrigido.consistent, true, 'saúde é recalculada a cada leitura');
+  } finally {
+    await panel.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('painel: cliente desativa controles e avisa quando a coleta está inconsistente', () => {
+  const js = fs.readFileSync(path.join(__dirname, '..', 'ui', 'painel.js'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'ui', 'painel.html'), 'utf8');
+  assert.match(js, /state\.consistent === false/);
+  assert.match(js, /Feche o aplicativo e inicie uma nova correção/);
+  assert.match(js, /\$\('copyAll'\)\.disabled = true/);
+  assert.match(js, /\$\('submit'\)\.disabled = true/);
+  for (const id of ['copyAll', 'submit', 'fileInput', 'clear']) {
+    assert.match(html, new RegExp('id="' + id + '"[^>]*disabled'), id + ' começa desativado');
+  }
+});
