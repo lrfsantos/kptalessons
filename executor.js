@@ -11,9 +11,11 @@
 //   report.json  -> resultado por atividade + estatísticas calculadas aqui
 //   revisao.md   -> entradas que exigem atenção manual (tela de revisão)
 //
-// Uso:
-//   npm run apply
-//   npm run apply -- lotes/lote-01.devolvido.md   (arquivos específicos)
+// Reutilizável: applyAcceptedCorrections({ page, files, data }) opera na
+// página JÁ EXISTENTE (no app Tauri, o WebView2 da janela única). Não cria
+// navegador, não fecha navegador e não chama process.exit — devolve
+// resultado estruturado ao orquestrador, com eventos via onProgress.
+// O wrapper CLI mantém o fluxo antigo (npm run apply) em paralelo.
 // ============================================================
 const fs = require('fs');
 const path = require('path');
@@ -54,106 +56,101 @@ function indexOriginals(data) {
   return map;
 }
 
-(async () => {
-  console.log('🚀 CNA Corretor — apply');
-  console.log('⚠️  As atividades PRONTAS serão FINALIZADAS automaticamente (ação irreversível).');
-
-  const files = findReturnedFiles();
-  if (!files.length) {
-    console.error(`❌ Nenhum retorno válido em ${CFG.RETURNS_DIR}. Cole as respostas no Painel de Correção.`);
-    process.exit(1);
-  }
-  if (!fs.existsSync(CFG.ANSWERS_FILE)) {
-    console.error('❌ answers.json não existe. Rode primeiro:  npm run scrape');
-    process.exit(1);
-  }
-
-  const data = JSON.parse(fs.readFileSync(CFG.ANSWERS_FILE, 'utf8'));
-  const collection = data.collection;
-  if (!collection || !collection.nonce || !Array.isArray(collection.batches)) {
-    console.error('❌ answers.json sem identidade de coleta. Rode:  npm run scrape');
-    process.exit(1);
-  }
-  const applied = new Set(data.appliedRefs || []);
-  // T12: valida cada devolvido contra a coleta atual antes de qualquer navegação.
-  const inspected = mdrv.inspectReturnedBatches(files.map(f => ({ path: f })), collection);
-  for (const f of inspected.files) {
-    if (f.issues.length) console.log(`⚠️  ${f.name}: ${f.issues.join('; ')}`);
-  }
-  if (inspected.missingBatches.length)
-    console.log(`ℹ️  Lotes ainda não devolvidos: ${inspected.missingBatches.map(n => String(n).padStart(2, '0')).join(', ')}`);
-  if (inspected.duplicateRefs.length)
-    console.log(`⚠️  Refs duplicadas nos devolvidos: ${inspected.duplicateRefs.join(', ')}`);
-  const fileIssues = new Map();
-  for (const f of inspected.files) if (f.issues.length) fileIssues.set(f.name, f.issues.join('; '));
-  const originals = indexOriginals(data);
-  const entries = mdrv.parseReturned(files);
-  console.log(`📄 ${entries.length} entrada(s) em ${files.length} arquivo(s).`);
-
-  if (!entries.length) { console.error('⚠️  Nenhuma atividade encontrada nos arquivos.'); process.exit(1); }
-
-  // ---- Validação ANTES de qualquer navegação --------------------
-  // T6c: ref duplicada nos devolvidos => as DUAS entradas vão para revisão.
-  const dupRefs = mdrv.duplicateRefs(entries);
-  const results = [];
-  for (const e of entries) {
-    const original = originals.get(e.ref);
-    const orig = original ? {
-      question: original.lesson.question || '',
-      answer: original.lesson.answer || '',
-      answerMasked: mdrv.maskAnswer(original.lesson.answer, original.student && original.student.name),
-    } : null;
-
-    const issuesArquivo = e.sourceFile ? fileIssues.get(path.basename(e.sourceFile)) : null;
-    if (issuesArquivo) {
-      results.push({ ...e, status: 'REVISAO', reasons: [`lote devolvido inválido: ${issuesArquivo}`] });
-      continue;
+function applyAcceptedCorrections({ page, files, data, signal = null, onProgress = () => {} } = {}) {
+  return (async () => {
+    const collection = data.collection;
+    const applied = new Set(data.appliedRefs || []);
+    // Rodada 5, item 2: sinal compartilhado com o monitor de saúde. Uma vez
+    // abortado, NENHUMA nova operação no portal começa; só confirmações já
+    // obtidas entram em appliedRefs (regra inalterada).
+    const cancelado = () => !!(signal && signal.aborted);
+    const motivo = () => (signal && signal.reason && signal.reason.message) || 'conexão perdida';
+    // T12: valida cada devolvido contra a coleta atual antes de qualquer navegação.
+    const inspected = mdrv.inspectReturnedBatches(files.map(f => ({ path: f })), collection);
+    for (const f of inspected.files) {
+      if (f.issues.length) console.log(`⚠️  ${f.name}: ${f.issues.join('; ')}`);
     }
-    if (e.error) {
-      results.push({ ...e, status: 'REVISAO', reasons: [e.error] });
-      continue;
-    }
-    if (e.ref && applied.has(e.ref)) {
-      results.push({ ...e, status: 'JA_APLICADA', reasons: ['já preenchida/finalizada nesta coleta — não aplicar de novo'] });
-      continue;
-    }
-    if (e.ref && dupRefs.has(e.ref)) {
-      results.push({ ...e, status: 'REVISAO', reasons: [`ref ${e.ref} duplicada nos devolvidos`] });
-      continue;
-    }
-    if (e.pending) {
-      results.push({ ...e, status: 'REVISAO', reasons: ['IA não preencheu classificação/feedback'] });
-      continue;
-    }
-    const v = validateEntry({ ...e, prefilter: original ? original.lesson.prefilter : null, pergunta: original ? orig.question : e.pergunta, respostaLida: e.respostaLida }, orig);
-    // nota: se respostaLida é null (nonce ausente), validateEntry detecta a diferença
-    results.push({
-      ...e,
-      status: v.review ? 'REVISAO' : 'PRONTA',
-      reasons: v.reasons,
-    });
-  }
+    if (inspected.missingBatches.length)
+      console.log(`ℹ️  Lotes ainda não devolvidos: ${inspected.missingBatches.map(n => String(n).padStart(2, '0')).join(', ')}`);
+    if (inspected.duplicateRefs.length)
+      console.log(`⚠️  Refs duplicadas nos devolvidos: ${inspected.duplicateRefs.join(', ')}`);
+    const fileIssues = new Map();
+    for (const f of inspected.files) if (f.issues.length) fileIssues.set(f.name, f.issues.join('; '));
+    const originals = indexOriginals(data);
+    const entries = mdrv.parseReturned(files);
+    console.log(`📄 ${entries.length} entrada(s) em ${files.length} arquivo(s).`);
 
-  const prontas = results.filter(r => r.status === 'PRONTA');
-  console.log(`✅ ${prontas.length} pronta(s) para preencher; ${results.length - prontas.length} para revisão manual.`);
+    if (!entries.length) throw new Error('Nenhuma atividade encontrada nos arquivos devolvidos.');
 
-  // ---- T7: relatório da IA (só consulta; o oficial é o calculado aqui) ----
-  const reports = [];
-  for (const f of files) {
-    const text = typeof f === 'string' && /<|#/i.test(f) ? f : fs.readFileSync(f, 'utf8');
-    const rep = mdrv.extractReport(text);
-    if (rep) reports.push(`## ${typeof f === 'string' && /<|#/i.test(f) ? 'colado' : f}\n\n${rep}`);
-  }
-  if (reports.length) {
-    fs.writeFileSync(CFG.RELATORIO_IA_FILE, `# Relatório da IA (somente consulta)\n\n_O relatório oficial é o calculado pelo programa, em report.json/terminal._\n\n` + reports.join('\n\n---\n\n') + '\n');
-    console.log(`📝 relatorio-ia.md salvo (relatório da IA — só consulta).`);
-  }
+    // ---- Validação ANTES de qualquer navegação --------------------
+    // T6c: ref duplicada nos devolvidos => as DUAS entradas vão para revisão.
+    const dupRefs = mdrv.duplicateRefs(entries);
+    const results = [];
+    for (const e of entries) {
+      const original = originals.get(e.ref);
+      const orig = original ? {
+        question: original.lesson.question || '',
+        answer: original.lesson.answer || '',
+        answerMasked: mdrv.maskAnswer(original.lesson.answer, original.student && original.student.name),
+      } : null;
 
-  // ---- Preenche no portal --------------------------------------
-  const { browser, page } = await launch();
-  const filled = [];
-  try {
+      const issuesArquivo = e.sourceFile ? fileIssues.get(path.basename(e.sourceFile)) : null;
+      if (issuesArquivo) {
+        results.push({ ...e, status: 'REVISAO', reasons: [`lote devolvido inválido: ${issuesArquivo}`] });
+        continue;
+      }
+      if (e.error) {
+        results.push({ ...e, status: 'REVISAO', reasons: [e.error] });
+        continue;
+      }
+      if (e.ref && applied.has(e.ref)) {
+        results.push({ ...e, status: 'JA_APLICADA', reasons: ['já preenchida/finalizada nesta coleta — não aplicar de novo'] });
+        continue;
+      }
+      if (e.ref && dupRefs.has(e.ref)) {
+        results.push({ ...e, status: 'REVISAO', reasons: [`ref ${e.ref} duplicada nos devolvidos`] });
+        continue;
+      }
+      if (e.pending) {
+        results.push({ ...e, status: 'REVISAO', reasons: ['IA não preencheu classificação/feedback'] });
+        continue;
+      }
+      const v = validateEntry({ ...e, prefilter: original ? original.lesson.prefilter : null, pergunta: original ? orig.question : e.pergunta, respostaLida: e.respostaLida }, orig);
+      // nota: se respostaLida é null (nonce ausente), validateEntry detecta a diferença
+      results.push({
+        ...e,
+        status: v.review ? 'REVISAO' : 'PRONTA',
+        reasons: v.reasons,
+      });
+    }
+
+    const prontas = results.filter(r => r.status === 'PRONTA');
+    console.log(`✅ ${prontas.length} pronta(s) para preencher; ${results.length - prontas.length} para revisão manual.`);
+    onProgress('RETURN_VALIDATED', { prontas: prontas.length, revisao: results.length - prontas.length });
+
+    // ---- T7: relatório da IA (só consulta; o oficial é o calculado aqui) ----
+    const reports = [];
+    for (const f of files) {
+      const text = typeof f === 'string' && /<|#/i.test(f) ? f : fs.readFileSync(f, 'utf8');
+      const rep = mdrv.extractReport(text);
+      if (rep) reports.push(`## ${typeof f === 'string' && /<|#/i.test(f) ? 'colado' : f}\n\n${rep}`);
+    }
+    if (reports.length) {
+      fs.writeFileSync(CFG.RELATORIO_IA_FILE, `# Relatório da IA (somente consulta)\n\n_O relatório oficial é o calculado pelo programa, em report.json/terminal._\n\n` + reports.join('\n\n---\n\n') + '\n');
+      console.log(`📝 relatorio-ia.md salvo (relatório da IA — só consulta).`);
+    }
+
+    // ---- Preenche no portal (mesma página, mesmo contexto) ---------
+    const filled = [];
+    onProgress('APPLICATION_STARTED', { prontas: prontas.length });
     for (const r of prontas) {
+      // Antes de iniciar/navegar para cada atividade (e antes de continuar
+      // para a próxima): restantes ficam em revisão, nunca em appliedRefs.
+      if (cancelado()) {
+        r.status = 'REVISAO';
+        r.reasons = [...(r.reasons || []), 'aplicação cancelada (' + motivo() + ') — não iniciada'];
+        continue;
+      }
       const url = portal.activityUrl(r.classId, r.studentId, r.unitId, r.lessonId, r.activityId);
       process.stdout.write(`   ${r.ref} ... `);
       try {
@@ -193,11 +190,25 @@ function indexOriginals(data) {
           continue;
         }
 
+        // A conexão pode cair DURANTE a navegação/leitura: não preencher.
+        if (cancelado()) {
+          r.status = 'REVISAO';
+          r.reasons = [...(r.reasons || []), 'aplicação cancelada (' + motivo() + ') antes de preencher — não iniciada'];
+          continue;
+        }
         const res = await portal.fillCorrection(page, r.classification, r.feedback);
         if (res.ok) {
-          const fin = await portal.finalize(page);
-          if (fin.ok) { r.finalized = true; filled.push(r); console.log(`${r.classification} — FINALIZADA`); }
-          else { r.status = 'REVISAO'; r.reasons = [...(r.reasons || []), fin.error]; console.log(`FALHA NA FINALIZAÇÃO: ${fin.error} — não registrada como concluída`); }
+          // Imediatamente antes da finalização (ação irreversível): cancelado
+          // => NÃO clicar, NÃO registrar como concluída.
+          if (cancelado()) {
+            r.status = 'REVISAO';
+            r.reasons = [...(r.reasons || []), 'aplicação cancelada (' + motivo() + ') após preencher — não finalizada'];
+            console.log('CANCELADA: conexão perdida antes da finalização — não registrada como concluída');
+          } else {
+            const fin = await portal.finalize(page);
+            if (fin.ok) { r.finalized = true; filled.push(r); console.log(`${r.classification} — FINALIZADA`); }
+            else { r.status = 'REVISAO'; r.reasons = [...(r.reasons || []), fin.error]; console.log(`FALHA NA FINALIZAÇÃO: ${fin.error} — não registrada como concluída`); }
+          }
         }
         else { r.status = 'REVISAO'; r.reasons = [...(r.reasons || []), res.error]; console.log(`FALHOU: ${res.error}`); }
       } catch (err) {
@@ -205,77 +216,118 @@ function indexOriginals(data) {
         console.log(`ERRO: ${err.message}`);
       }
     }
-  } finally {
-    await browser.close();
-  }
 
-  // ---- Relatório (médias/contagens SEMPRE calculadas aqui) ------
-  // REGRA ABSOLUTA: só entra em appliedRefs quem teve a finalização CONFIRMADA
-  // (r.finalized). Nunca gravar refs de preenchidas-sem-finalizar.
-  const aplicadas = filled.filter(r => r.finalized && (r.status === 'PRONTA' || r.status === 'JA_CORRIGIDA'));
-  const finalizadasAgora = aplicadas.filter(r => r.status === 'PRONTA' && r.finalized);
-  const jaCorrigidas = aplicadas.filter(r => r.status === 'JA_CORRIGIDA');
-  if (aplicadas.length) {
-    data.appliedRefs = [...new Set([...applied, ...aplicadas.map(r => r.ref)])];
-    fs.writeFileSync(CFG.ANSWERS_FILE, JSON.stringify(data, null, 2));
-  }
-  const falhasFinalizacao = results.filter(r => /finalização|Finalizar|corrigida/i.test((r.reasons || []).join(' ')) && r.status === 'REVISAO').length;
-  const stat = n => results.filter(r => r.status === 'PRONTA').length;
-  const stats = {
-    geradoEm: new Date().toISOString(),
-    totalEntradas: results.length,
-    prontas: stat(),
-    preenchidasNoPortal: filled.filter(r => r.status === 'PRONTA').length,
-    jaAplicadasAntes: results.filter(r => r.status === 'JA_APLICADA').length,
-    finalizarAtivado: true,
-    finalizadasNestaExecucao: finalizadasAgora.length,
-    jaCorrigidasNoPortal: jaCorrigidas.length,
-    falhasFinalizacao,
-    notaPedidoProfessor: 'Finalização automática obrigatória (decisão do professor): só entram em appliedRefs as atividades com finalização CONFIRMADA no portal.',
-    revisaoManual: results.filter(r => r.status === 'REVISAO').length,
-    lotesNaoDevolvidos: inspected.missingBatches.map(n => String(n).padStart(2, '0')),
-    jaCorrigidas: jaCorrigidas.length,
-    incoerentes: results.filter(r => /incoerente|Flag\b|marcou revis/.test((r.reasons || []).join(' '))).length,
-    mediaScore: aplicadas.length ? Math.round(aplicadas.reduce((a, r) => a + (r.score || 0), 0) / aplicadas.length) : null,
-    porClassificacao: aplicadas.reduce((acc, r) => { acc[r.classification] = (acc[r.classification] || 0) + 1; return acc; }, {}),
-    porFlag: aplicadas.reduce((acc, r) => { const k = r.flag || 'NENHUM'; acc[k] = (acc[k] || 0) + 1; return acc; }, {}),
-  };
-  fs.writeFileSync(CFG.REPORT_FILE, JSON.stringify({ stats, results: results.map(({ respostaLida, feedback, ...rest }) => ({ ...rest, feedbackLength: (feedback || '').length })), aplicadas: aplicadas.map(r => r.ref) }, null, 2));
+    // ---- Relatório (médias/contagens SEMPRE calculadas aqui) ------
+    // REGRA ABSOLUTA: só entra em appliedRefs quem teve a finalização CONFIRMADA
+    // (r.finalized). Nunca gravar refs de preenchidas-sem-finalizar.
+    const aplicadas = filled.filter(r => r.finalized && (r.status === 'PRONTA' || r.status === 'JA_CORRIGIDA'));
+    const finalizadasAgora = aplicadas.filter(r => r.status === 'PRONTA' && r.finalized);
+    const jaCorrigidas = aplicadas.filter(r => r.status === 'JA_CORRIGIDA');
+    if (aplicadas.length) {
+      data.appliedRefs = [...new Set([...applied, ...aplicadas.map(r => r.ref)])];
+      fs.writeFileSync(CFG.ANSWERS_FILE, JSON.stringify(data, null, 2));
+    }
+    const falhasFinalizacao = results.filter(r => /finalização|Finalizar|corrigida/i.test((r.reasons || []).join(' ')) && r.status === 'REVISAO').length;
+    const stat = n => results.filter(r => r.status === 'PRONTA').length;
+    const stats = {
+      geradoEm: new Date().toISOString(),
+      totalEntradas: results.length,
+      prontas: stat(),
+      preenchidasNoPortal: filled.filter(r => r.status === 'PRONTA').length,
+      jaAplicadasAntes: results.filter(r => r.status === 'JA_APLICADA').length,
+      finalizarAtivado: true,
+      finalizadasNestaExecucao: finalizadasAgora.length,
+      jaCorrigidasNoPortal: jaCorrigidas.length,
+      falhasFinalizacao,
+      notaPedidoProfessor: 'Finalização automática obrigatória (decisão do professor): só entram em appliedRefs as atividades com finalização CONFIRMADA no portal.',
+      revisaoManual: results.filter(r => r.status === 'REVISAO').length,
+      lotesNaoDevolvidos: inspected.missingBatches.map(n => String(n).padStart(2, '0')),
+      jaCorrigidas: jaCorrigidas.length,
+      incoerentes: results.filter(r => /incoerente|Flag\b|marcou revis/.test((r.reasons || []).join(' '))).length,
+      mediaScore: aplicadas.length ? Math.round(aplicadas.reduce((a, r) => a + (r.score || 0), 0) / aplicadas.length) : null,
+      porClassificacao: aplicadas.reduce((acc, r) => { acc[r.classification] = (acc[r.classification] || 0) + 1; return acc; }, {}),
+      porFlag: aplicadas.reduce((acc, r) => { const k = r.flag || 'NENHUM'; acc[k] = (acc[k] || 0) + 1; return acc; }, {}),
+    };
+    fs.writeFileSync(CFG.REPORT_FILE, JSON.stringify({ stats, results: results.map(({ respostaLida, feedback, ...rest }) => ({ ...rest, feedbackLength: (feedback || '').length })), aplicadas: aplicadas.map(r => r.ref) }, null, 2));
 
-  // ---- Tela de revisão --------
-  const rev = results.filter(r => r.status === 'REVISAO');
-  let revisao = '# Revisão manual necessária\n\n';
-  revisao += '_O programa finaliza automaticamente as atividades PRONTAS. As entradas abaixo NÃO foram preenchidas nem finalizadas — exigem atenção manual._\n\n';
-  if (!rev.length) revisao += '_Nenhuma revisão pendente. Todas as entradas válidas foram preenchidas e finalizadas._\n';
-  if (inspected.missingBatches.length)
-    revisao += `- Lotes ainda não devolvidos nesta coleta: ${inspected.missingBatches.map(n => String(n).padStart(2, '0')).join(', ')}\n\n`;
-  for (const r of rev) {
-    revisao += `## ${r.title || '(sem título)'} [${r.ref || 'sem ref'}]\n\n`;
-    revisao += `- Fonte: ${r.sourceFile || '(entrada colada)'}\n`;
-    revisao += `- Motivo(s): ${(r.reasons || []).join('; ')}\n`;
-    revisao += `- Classificação devolvida: ${r.classification || '(vazia)'}${r.score != null ? ` | Score: ${r.score}` : ''}\n\n`;
-  }
-  fs.writeFileSync(CFG.REVISAO_FILE, revisao);
+    // ---- Tela de revisão --------
+    const rev = results.filter(r => r.status === 'REVISAO');
+    let revisao = '# Revisão manual necessária\n\n';
+    revisao += '_O programa finaliza automaticamente as atividades PRONTAS. As entradas abaixo NÃO foram preenchidas nem finalizadas — exigem atenção manual._\n\n';
+    if (!rev.length) revisao += '_Nenhuma revisão pendente. Todas as entradas válidas foram preenchidas e finalizadas._\n';
+    if (inspected.missingBatches.length)
+      revisao += `- Lotes ainda não devolvidos nesta coleta: ${inspected.missingBatches.map(n => String(n).padStart(2, '0')).join(', ')}\n\n`;
+    for (const r of rev) {
+      revisao += `## ${r.title || '(sem título)'} [${r.ref || 'sem ref'}]\n\n`;
+      revisao += `- Fonte: ${r.sourceFile || '(entrada colada)'}\n`;
+      revisao += `- Motivo(s): ${(r.reasons || []).join('; ')}\n`;
+      revisao += `- Classificação devolvida: ${r.classification || '(vazia)'}${r.score != null ? ` | Score: ${r.score}` : ''}\n\n`;
+    }
+    fs.writeFileSync(CFG.REVISAO_FILE, revisao);
 
-  console.log('\n' + '='.repeat(48));
-  console.log('📊 RELATÓRIO (calculado pelo programa, não pela IA)');
-  console.log('='.repeat(48));
-  console.log(`  Total de entradas        : ${stats.totalEntradas}`);
-  console.log(`  Preenchidas no portal    : ${stats.preenchidasNoPortal}`);
-  console.log(`  FINALIZADAS nesta execução: ${stats.finalizadasNestaExecucao}`);
-  console.log(`  Já corrigidas no portal  : ${stats.jaCorrigidasNoPortal} (sem novo clique)`);
-  console.log(`  Em revisão manual        : ${stats.revisaoManual}`);
-  if (stats.falhasFinalizacao) console.log(`  Falhas de finalização    : ${stats.falhasFinalizacao} (NÃO registradas como concluídas)`);
-  if (stats.jaAplicadasAntes) console.log(`  Já aplicadas (ignoradas) : ${stats.jaAplicadasAntes}`);
-  if (stats.lotesNaoDevolvidos.length) console.log(`  Lotes não devolvidos     : ${stats.lotesNaoDevolvidos.join(', ')}`);
-  console.log(`  Média de score           : ${stats.mediaScore ?? '—'}`);
-  console.log(`  Por classificação        : ` + (Object.entries(stats.porClassificacao).map(([k, v]) => `${k}=${v}`).join(' | ') || '—'));
-  console.log(`  Por flag (devolvido)     : ` + (Object.entries(stats.porFlag).map(([k, v]) => `${k}=${v}`).join(' | ') || '—'));
-  if (stats.jaCorrigidas) console.log(`  Já corrigidas no portal  : ${stats.jaCorrigidas}`);
-  if (stats.incoerentes) console.log(`  Incoerências detectadas : ${stats.incoerentes}`);
+    for (const r of filled) if (r.finalized && r.status === 'PRONTA') onProgress('ACTIVITY_FINALIZED', { status: r.classification });
+    if (rev.length) onProgress('REVIEW_REQUIRED', { revisao: rev.length });
+    if (cancelado()) onProgress('FLUXO_ERRO', { codigo: 'ERRO_CONEXAO_PERDIDA' });
+    // Cancelamento NUNCA vira sucesso, mesmo com confirmações parciais.
+    onProgress(!cancelado() && aplicadas.length ? 'APPLICATION_COMPLETED' : 'APPLICATION_FAILED', {
+      finalizadas: stats.finalizadasNestaExecucao,
+      jaCorrigidas: stats.jaCorrigidasNoPortal,
+      revisao: stats.revisaoManual,
+      falhas: stats.falhasFinalizacao,
+    });
+    return { stats, results, revisao, aplicadas: aplicadas.map(r => r.ref) };
+  })();
+}
 
-  console.log('💾 report.json e revisao.md gerados.');
-  console.log('👉 Finalização automática: as PRONTAS foram finalizadas no portal.');
-  console.log('   Entradas em revisao.md ou com falha de finalização NÃO foram registradas como concluídas —');
-  console.log('   a coleta e os lotes foram preservados para nova tentativa.');
-})().catch(e => { console.error('💥 Erro:', e.message); process.exit(1); });
+if (require.main === module) {
+  (async () => {
+    console.log('🚀 CNA Corretor — apply');
+    console.log('⚠️  As atividades PRONTAS serão FINALIZADAS automaticamente (ação irreversível).');
+
+    const files = findReturnedFiles();
+    if (!files.length) {
+      console.error(`❌ Nenhum retorno válido em ${CFG.RETURNS_DIR}. Cole as respostas no Painel de Correção.`);
+      process.exit(1);
+    }
+    if (!fs.existsSync(CFG.ANSWERS_FILE)) {
+      console.error('❌ answers.json não existe. Rode primeiro:  npm run scrape');
+      process.exit(1);
+    }
+
+    const data = JSON.parse(fs.readFileSync(CFG.ANSWERS_FILE, 'utf8'));
+    if (!data.collection || !data.collection.nonce || !Array.isArray(data.collection.batches)) {
+      console.error('❌ answers.json sem identidade de coleta. Rode:  npm run scrape');
+      process.exit(1);
+    }
+
+    const { browser, page } = await launch();
+    try {
+      const { stats } = await applyAcceptedCorrections({ page, files, data });
+      console.log('\n' + '='.repeat(48));
+      console.log('📊 RELATÓRIO (calculado pelo programa, não pela IA)');
+      console.log('='.repeat(48));
+      console.log(`  Total de entradas        : ${stats.totalEntradas}`);
+      console.log(`  Preenchidas no portal    : ${stats.preenchidasNoPortal}`);
+      console.log(`  FINALIZADAS nesta execução: ${stats.finalizadasNestaExecucao}`);
+      console.log(`  Já corrigidas no portal  : ${stats.jaCorrigidasNoPortal} (sem novo clique)`);
+      console.log(`  Em revisão manual        : ${stats.revisaoManual}`);
+      if (stats.falhasFinalizacao) console.log(`  Falhas de finalização    : ${stats.falhasFinalizacao} (NÃO registradas como concluídas)`);
+      if (stats.jaAplicadasAntes) console.log(`  Já aplicadas (ignoradas) : ${stats.jaAplicadasAntes}`);
+      if (stats.lotesNaoDevolvidos.length) console.log(`  Lotes não devolvidos     : ${stats.lotesNaoDevolvidos.join(', ')}`);
+      console.log(`  Média de score           : ${stats.mediaScore ?? '—'}`);
+      console.log(`  Por classificação        : ` + (Object.entries(stats.porClassificacao).map(([k, v]) => `${k}=${v}`).join(' | ') || '—'));
+      console.log(`  Por flag (devolvido)     : ` + (Object.entries(stats.porFlag).map(([k, v]) => `${k}=${v}`).join(' | ') || '—'));
+      if (stats.jaCorrigidas) console.log(`  Já corrigidas no portal  : ${stats.jaCorrigidas}`);
+      if (stats.incoerentes) console.log(`  Incoerências detectadas : ${stats.incoerentes}`);
+
+      console.log('💾 report.json e revisao.md gerados.');
+      console.log('👉 Finalização automática: as PRONTAS foram finalizadas no portal.');
+      console.log('   Entradas em revisao.md ou com falha de finalização NÃO foram registradas como concluídas —');
+      console.log('   a coleta e os lotes foram preservados para nova tentativa.');
+    } finally {
+      await browser.close();
+    }
+  })().catch(e => { console.error('💥 Erro:', e.message); process.exit(1); });
+}
+
+module.exports = { applyAcceptedCorrections, findReturnedFiles };

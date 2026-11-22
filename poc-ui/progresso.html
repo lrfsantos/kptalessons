@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Corretor CNA — Progresso</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topo">
+      <span class="marca" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+          <path d="M12 3 2.5 8.2 12 13.4l7.2-4v5.1h1.6V8.2L12 3Z" fill="#fff"/>
+          <path d="M6.4 11.2v3.9c0 1.5 2.5 3 5.6 3s5.6-1.5 5.6-3v-3.9l-5.6 3.1-5.6-3.1Z" fill="#fff" opacity=".85"/>
+        </svg>
+      </span>
+      <div>
+        <div class="titulo-app">Corretor CNA</div>
+        <div class="subtitulo-app">Preparando suas atividades</div>
+      </div>
+    </header>
+
+    <main class="conteudo">
+      <section class="cartao">
+        <h1>Quase lá</h1>
+        <p id="mensagem">Estamos preparando os lotes para você enviar à sua IA.</p>
+        <div class="progresso-indeterminado" role="progressbar" aria-label="Em andamento"></div>
+        <ul class="etapas margem-topo">
+          <li class="pronta"><span class="etapa-icone" aria-hidden="true">✓</span>Acesso ao portal confirmado</li>
+          <li class="ativa"><span class="etapa-icone" aria-hidden="true"></span>Localizando atividades pendentes</li>
+          <li><span class="etapa-icone" aria-hidden="true"></span>Preparando os lotes para correção</li>
+        </ul>
+        <button class="botao primario margem-topo" type="button" id="continuar">Continuar para o painel</button>
+      </section>
+    </main>
+
+    <footer class="rodape">Corretor CNA · correção assistida por IA em janela única</footer>
+  </div>
+  <script src="/progresso.js"></script>
+</body>
+</html>

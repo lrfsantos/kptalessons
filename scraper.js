@@ -1,21 +1,21 @@
 // ============================================================
 // CNA Corretor — SCRAPER (exporta as atividades escritas)
 //
-// Navega o portal do professor DE FORMA INDEPENDENTE e gera:
+// Navega o portal do professor e gera:
 //   answers.json              -> dados estruturados (uso do executor)
 //   lotes/lote-NN.md          -> documentos para a IA corrigir
 //                                (INJECT + nonce no topo de cada lote)
 //
 // Atividades que falham na captura NÃO entram no MD: são
-// registradas como capture_failed, avisadas no terminal com
-// turma/aluno/ref e contadas no final. Resposta realmente em
-// branco (página carregou e o campo está vazio) É capturada como
-// "em branco" e entra normalmente.
+// registradas como capture_failed e contadas no final. Resposta
+// realmente em branco (página carregou e o campo está vazio) É
+// capturada como "em branco" e entra normalmente.
 //
-// Uso:
-//   npm run scrape            (até 10 atividades por lote)
-//   npm run scrape -- --lote 5 --all
-// Requer: login manual nesta execução (o wizard faz antes de coletar).
+// Reutilizável: collectActivities({ page }) opera na página JÁ
+// EXISTENTE (no app Tauri, o WebView2 da janela única). Não cria
+// navegador, não fecha navegador e não chama process.exit — devolve
+// resultado estruturado ao orquestrador, com eventos via onProgress.
+// O wrapper CLI mantém o fluxo antigo (npm run scrape) em paralelo.
 // ============================================================
 const fs = require('fs');
 const path = require('path');
@@ -29,8 +29,6 @@ function arg(name, def) {
   const i = process.argv.indexOf(`--${name}`);
   return i > -1 && process.argv[i + 1] ? process.argv[i + 1] : def;
 }
-const onlyPending = !process.argv.includes('--all');
-const loteSize = parseInt(arg('lote', String(CFG.LOTE_SIZE || 10)), 10) || 10;
 
 function archivePreviousRun() {
   fs.mkdirSync(CFG.LOTES_DIR, { recursive: true });
@@ -55,24 +53,20 @@ function archivePreviousRun() {
   return true;
 }
 
-(async () => {
-  console.log('🚀 CNA Corretor — scrape (coleta de atividades escritas)');
-
-  // Cada login pertence a uma única execução/professor. Arquive tudo da execução anterior
-  // antes de coletar, evitando que answers.json ou lotes de outra conta sejam reutilizados.
-  const archived = archivePreviousRun();
-  if (archived) console.log('📦 Execução anterior arquivada (documentos preservados). Iniciando coleta nova.\n');
-  const { browser, page } = await launch({ headless: CFG.HEADLESS === true });
+// Cada login pertence a uma única execução/professor: arquive tudo da
+// execução anterior antes de coletar (higiene da coleta, T12).
+function collectActivities({ page, onlyPending = true, loteSize = 10, onProgress = () => {} } = {}) {
   const classes = [];
   const captureFailures = []; // { ref, turma, aluno, title }
   const blanks = [];          // respostas realmente em branco (informativo)
 
-  try {
+  return (async () => {
     // 1. Turmas
     await page.goto(portal.CLASSES_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector(portal.SEL.classLink, { timeout: CFG.NAV_TIMEOUT });
     const allClasses = await portal.listClasses(page);
     const withPending = onlyPending ? allClasses.filter(c => c.pending > 0) : allClasses;
+    onProgress('COLLECTION_STARTED', { turmas: allClasses.length, comPendencias: withPending.length });
     console.log(`🏫 ${allClasses.length} turma(s); ${withPending.length} com pendências.`);
 
     // 2. Alunos e lições de cada turma
@@ -161,20 +155,20 @@ function archivePreviousRun() {
       // Caso A: nada pendente de verdade.
       fs.writeFileSync(CFG.ANSWERS_FILE, JSON.stringify({ generatedAt, collection: null, captureFailures: [], classes, appliedRefs: [] }, null, 2));
       console.log('\n✅ Nenhuma atividade pendente. Nada a corrigir.');
-      return;
+      return { status: 'EMPTY', pendentes: 0, capturadas: 0, collection: null, captureFailures: [], blanks };
     }
     if (!capturadas) {
       // Caso C: havia trabalho, mas nada pôde ser capturado.
       fs.writeFileSync(CFG.ANSWERS_FILE, JSON.stringify({ generatedAt, collection: null, captureFailures, classes, appliedRefs: [], captureFailed: true }, null, 2));
       console.error(`\n❌ Havia ${captureFailures.length} atividade(s)/aluno(s) pendente(s), mas nenhuma pôde ser capturada.`);
       console.error('   O diagnóstico ficou em answers.json (captureFailures). Nenhum lote foi gerado.');
-      process.exit(2);
+      return { status: 'CAPTURE_FAILED', pendentes, capturadas: 0, collection: null, captureFailures, blanks };
     }
     // Caso B: captura parcial — processa o que deu certo e reporta o resto.
 
     // 4. Gera os lotes MD (nonce novo + INJECT em cada lote) e salva a
     //    identidade da coleta junto com os dados estruturados (T12).
-    const { nonce, files, total } = md.buildBatches(classes, { loteSize });
+    const { nonce, files, total } = md.buildBatches(classes, { loteSize, outDir: CFG.LOTES_DIR });
     const collection = {
       id: generatedAt,
       nonce,
@@ -193,7 +187,29 @@ function archivePreviousRun() {
     console.log('   No fluxo completo (npm run corrigir), o Painel Local abre automaticamente.');
     console.log('   Copie um lote ou todos, envie à IA e cole o retorno no painel.');
     console.log('   Não é necessário criar, salvar ou renomear arquivos devolvidos.');
-  } finally {
-    await browser.close();
-  }
-})().catch(e => { console.error('💥 Erro:', e.message); process.exit(1); });
+
+    onProgress('COLLECTION_COMPLETED', { atividades: total, lotes: files.length, capturasFalhas: captureFailures.length });
+    return { status: 'OK', pendentes, capturadas, collection, captureFailures, blanks };
+  })();
+}
+
+if (require.main === module) {
+  (async () => {
+    console.log('🚀 CNA Corretor — scrape (coleta de atividades escritas)');
+    const archived = archivePreviousRun();
+    if (archived) console.log('📦 Execução anterior arquivada (documentos preservados). Iniciando coleta nova.\n');
+    const { browser, page } = await launch({ headless: CFG.HEADLESS === true });
+    try {
+      const r = await collectActivities({
+        page,
+        onlyPending: !process.argv.includes('--all'),
+        loteSize: parseInt(arg('lote', String(CFG.LOTE_SIZE || 10)), 10) || 10,
+      });
+      if (r.status === 'CAPTURE_FAILED') process.exit(2);
+    } finally {
+      await browser.close();
+    }
+  })().catch(e => { console.error('💥 Erro:', e.message); process.exit(1); });
+}
+
+module.exports = { collectActivities, archivePreviousRun };

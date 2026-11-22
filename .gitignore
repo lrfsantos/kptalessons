@@ -34,3 +34,5 @@ Thumbs.db
 
 # Node portatil (so na pasta de distribuicao; nunca commitar)
 runtime/
+
+cna-scrape.json

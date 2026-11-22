@@ -1,0 +1,5 @@
+# Recursos do sidecar sao gerados por scripts/poc-package-resources.ps1
+# (contem node.exe de ~88 MB; nunca commitar).
+resources/
+target/
+gen/

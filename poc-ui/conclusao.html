@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Corretor CNA — Correção concluída</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topo">
+      <span class="marca" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+          <path d="M12 3 2.5 8.2 12 13.4l7.2-4v5.1h1.6V8.2L12 3Z" fill="#fff"/>
+          <path d="M6.4 11.2v3.9c0 1.5 2.5 3 5.6 3s5.6-1.5 5.6-3v-3.9l-5.6 3.1-5.6-3.1Z" fill="#fff" opacity=".85"/>
+        </svg>
+      </span>
+      <div>
+        <div class="titulo-app">Corretor CNA</div>
+        <div class="subtitulo-app">Correção concluída</div>
+      </div>
+    </header>
+
+    <main class="conteudo">
+      <section class="cartao">
+        <h1>Correção concluída</h1>
+        <p id="resumo">Resumo da execução abaixo.</p>
+        <div class="metricas margem-topo">
+          <div class="metrica"><strong id="finalizadas">0</strong><span>Atividades finalizadas</span></div>
+          <div class="metrica"><strong id="jaCorrigidas">0</strong><span>Já estavam corrigidas</span></div>
+          <div class="metrica"><strong id="revisao">0</strong><span>Para revisão manual</span></div>
+          <div class="metrica"><strong id="falhas">0</strong><span>Falhas de finalização</span></div>
+        </div>
+        <p class="secundario margem-topo" id="pastaResultados" hidden></p>
+      </section>
+
+      <div class="aviso atencao margem-topo" role="note" id="avisoFinal" hidden>
+        <strong id="avisoFinalTitulo"></strong>
+        <span id="avisoFinalTexto"></span>
+      </div>
+    </main>
+
+    <footer class="rodape">Corretor CNA · correção assistida por IA em janela única</footer>
+  </div>
+  <script src="/conclusao.js"></script>
+</body>
+</html>

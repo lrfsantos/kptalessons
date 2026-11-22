@@ -77,13 +77,17 @@ test('todos os lotes devolvidos: nenhum pendente', () => {
 
 test('arquivamento preserva nomes originais e tira os arquivos da pasta ativa', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cna-arq-'));
-  fs.writeFileSync(path.join(dir, 'lote-01.md'), doc(1, ['C1 S2 U3 L4 A5']));
-  fs.writeFileSync(path.join(dir, 'lote-01.devolvido.md'), doc(1, ['C1 S2 U3 L4 A5']));
-  const archive = md.archivePrevious(dir);
-  assert.ok(archive && fs.existsSync(archive));
-  const content = fs.readFileSync(archive, 'utf8');
-  assert.ok(content.includes('## Arquivo: lote-01.md'));
-  assert.ok(content.includes('## Arquivo: lote-01.devolvido.md'));
-  assert.deepEqual(fs.readdirSync(dir).filter(f => f.endsWith('.devolvido.md')), []);
-  assert.deepEqual(fs.readdirSync(dir).filter(f => /^lote-\d+\.md$/.test(f)), []);
+  try {
+    fs.writeFileSync(path.join(dir, 'lote-01.md'), doc(1, ['C1 S2 U3 L4 A5']));
+    fs.writeFileSync(path.join(dir, 'lote-01.devolvido.md'), doc(1, ['C1 S2 U3 L4 A5']));
+    const archive = md.archivePrevious(dir);
+    assert.ok(archive && fs.existsSync(archive));
+    const content = fs.readFileSync(archive, 'utf8');
+    assert.ok(content.includes('## Arquivo: lote-01.md'));
+    assert.ok(content.includes('## Arquivo: lote-01.devolvido.md'));
+    assert.deepEqual(fs.readdirSync(dir).filter(f => f.endsWith('.devolvido.md')), []);
+    assert.deepEqual(fs.readdirSync(dir).filter(f => /^lote-\d+\.md$/.test(f)), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
