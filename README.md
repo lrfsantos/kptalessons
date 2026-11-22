@@ -18,8 +18,8 @@ serviço — é uma decisão e uma ação suas, não do aplicativo.
 **👉 [Baixar o instalador do Corretor CNA (Windows 64 bits)](https://github.com/lrfsantos/kptalessons/releases/latest)**
 
 O link acima abre a página **Releases** do GitHub, onde o arquivo
-`Corretor-CNA-0.1.0-x64-setup.exe` está em *Assets* (seção de downloads). Se preferir, acesse diretamente
-[a página da versão v0.1.0](https://github.com/lrfsantos/kptalessons/releases/tag/v0.1.0).
+`Corretor-CNA-0.1.1-x64-setup.exe` está em *Assets* (seção de downloads). Se preferir, acesse diretamente
+[a página da versão v0.1.1](https://github.com/lrfsantos/kptalessons/releases/tag/v0.1.1).
 
 O aplicativo **não está no código-fonte do repositório** — ele é publicado como instalador na
 Release acima.
