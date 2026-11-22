@@ -4,8 +4,10 @@ Ferramenta **gratuita** para professores do CNA corrigirem atividades escritas d
 (app.cna.com.br). A **versão oficial** é um aplicativo Windows feito com **Tauri + WebView2**:
 um instalador, uma janela só, sem terminal e sem navegador separado.
 
-Você escolhe a IA (Gemini, ChatGPT ou outra). O programa não tem API própria, não cobra nada
-e **não envia dados para nenhum serviço**: a transferência é feita por você, copiando e colando.
+Você escolhe a IA (Gemini, ChatGPT ou outra). O programa não tem API própria e não cobra nada.
+**Não existe envio automático**: a transferência é feita por você, copiando o lote do programa e colando
+no serviço de IA que escolher. Ao fazer isso, o conteúdo do lote sai do computador e vai para esse
+serviço — é uma decisão e uma ação suas, não do aplicativo.
 
 ---
 

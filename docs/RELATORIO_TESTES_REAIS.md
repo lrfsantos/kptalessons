@@ -95,8 +95,8 @@ para não exercitar o clique irreversível.
    (turmas processadas / atividades encontradas).
 7. **Painel sem confirmação persistente:** o aviso de "Conteúdo copiado" aparece, mas não há um
    marcador durável por lote.
-8. **Retenção local:** os 10 lotes reunidos ficam em `Desktop\CNA teste` com dados reais e devem
-   ser apagados por quem orquestra, após preservar este relatório.
+8. **Retenção local:** os 10 lotes reunidos ficaram em `Desktop\CNA teste` com dados reais e foram
+   apagados após a validação final; este relatório sanitizado é a única evidência versionada.
 
 ## 5. Correções posteriores e rodada curta aprovada
 
@@ -119,7 +119,7 @@ para não exercitar o clique irreversível.
 **Fora de escopo, portanto NÃO feito:** sessão persistente, mudanças em autenticação,
 arquitetura Tauri, UI geral, parser, rubrica, executor ou política de finalização; nova auditoria
 geral; clique em Finalizar em atividade real; uso de dados de alunos em testes automatizados;
-merge, push ou force push.
+merge ou force push. O push da rodada foi feito em seguida (ver §7).
 
 ## 6. Verificação automatizada da rodada
 
@@ -136,18 +136,28 @@ merge, push ou force push.
 - Após `scripts\poc-package-resources.ps1` (recursos de 102,07 MB empacotados em
   `src-tauri/resources/`, diretório ignorado pelo Git): `cargo fmt --check` ok,
   `cargo check` ok e `cargo test` ok (12 testes Rust aprovados, 0 falhas).
-- Working tree limpa ao final; nenhum push realizado.
+- Working tree limpa ao final da rodada; o push foi realizado logo depois.
 
-## 7. Pendências para a validação física final
+## 7. Push, CI e validação física final (concluídos)
 
-1. Instalar o `.exe` do artefato `corretor-cna-nsis` em máquina limpa e confirmar o atalho no
-   Menu Iniciar.
-2. Abrir, iniciar correção, fazer login manual na janela única e copiar um lote — confirmando que
-   o erro antigo de cópia não reaparece.
-3. Conferir que, ao fechar, o perfil temporário desaparece e nenhum dado de aluno permanece na
-   pasta de instalação.
-4. Confirmar visualmente o estado inconsistente (instrução central e botões desativados) e a
-   mensagem de lote ausente.
-5. Apagar `C:\Users\luiza\Desktop\CNA teste` **depois** de preservado este relatório — não foi
-   apagado nesta rodada, por determinação de quem orquestra.
-6. Push, CI e validação física final ficam com quem orquestra.
+- Push de `578d6db..795dd53` para `feat/tauri-webview2-real-flow-fluent`; PR #1 permanece aberto e sem merge.
+- CI no HEAD `795dd53`: matriz Node 22/24 em Windows e Linux (4× success), `cargo fmt --check`,
+  `cargo check`, `cargo test` e build NSIS — todos verdes; artefato `corretor-cna-nsis` (26,3 MB)
+  publicado; sem `continue-on-error`.
+- Validação física final com o instalador desse HEAD:
+  1. Instalação silenciosa concluída; atalho "Corretor CNA" presente no Menu Iniciar.
+  2. Abertura pelo atalho → uma janela, sem terminal; Iniciar → login manual no portal CNA na
+     mesma janela → coleta automática → painel com 9 atividades.
+  3. **Ambos** os botões exercitados: "Copiar lote" e "Copiar todos os lotes" confirmaram a cópia
+     (23.285 caracteres, 9 referências); o erro 404 antigo não reapareceu.
+  4. O arquivo do lote existe somente em `%TEMP%\cna-corretor-run-*\lotes`; **zero** arquivos
+     `lote-*.md` na pasta de instalação (`resources/`).
+  5. Diagnóstico de inconsistência exercitado: com o arquivo do lote temporariamente ausente, o
+     painel exibiu "Os dados desta correção estão incompletos. Feche o aplicativo e inicie uma nova
+     correção." e desativou os controles; com o arquivo restaurado, o painel voltou ao normal.
+  6. Encerramento gracioso: nenhum perfil WebView2, nenhum diretório de execução e nenhum lote
+     restante; o aplicativo permanece instalado para uso.
+  7. A pasta `C:\Users\luiza\Desktop\CNA teste` (10 lotes com dados reais) foi apagada.
+
+Limitações que permanecem como trabalho futuro, não como bloqueio: escalas de DPI, máquina sem
+WebView2 pré-instalado, progresso detalhado durante a coleta e variedade de formatos nos dados reais.
